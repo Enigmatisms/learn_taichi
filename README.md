@@ -6,7 +6,7 @@ Taichi Lang &amp; LLVM learning
 ### Taichi Learning Week 1 Goal
 
 - Basic syntax and usage, being able to create some parallel visualized programs. Note that only one case will not be enough, therefore you can try to build more simple programs.
-  - [ ] SDF visualizer
+  - [x] SDF (DF) visualizer
   - [ ] Marching squares
   - [ ] Cellular automata (simple playable one)
   - [ ] Multi-body simulation

@@ -7,7 +7,19 @@
 """
 
 import taichi as ti
+import numpy as np
 import taichi.math as tm
+
+
+W = 800
+H = 600
+T = 1000000
+PNUM = 8
+
+ti.init(arch = ti.gpu)
+pixels = ti.field(dtype=float, shape=(W, H))
+points_field = ti.Vector.field(2, dtype = ti.f32, shape = PNUM)
+normal_field = ti.Vector.field(2, dtype = ti.f32, shape = PNUM - 1)
 
 @ti.func
 def is_in_scope(pix_pos, t1, t2):
@@ -22,9 +34,10 @@ def is_in_scope(pix_pos, t1, t2):
     return ret
 
 @ti.kernel
-def draw_distance_field(pixels: ti.field, lsegs: ti.Vector.field, normal = ti.Vector.field):
+def draw_distance_field(scaler: ti.f32):
     """
         FIXME: Note that we might not be able to input field as arguments? this must be changed \\
+        - Note that, we can not input field as argument, since I can not annotate it with right type...
         (Note1): kernel (if return anything), should have type annotation. For example:
         ```
         @ti.kernel
@@ -41,23 +54,46 @@ def draw_distance_field(pixels: ti.field, lsegs: ti.Vector.field, normal = ti.Ve
         - normal: normalized normal vector
     """
     # line segements are represented by vector field, lsegs stores the vertices of the line segment
-    line_seg_num = ti.static(lsegs.shape[0]) - 1
+    line_seg_num = ti.static(points_field.shape[0]) - 1
     for i, j in pixels: # the for loop of the outer-most scope is parallel
         min_value = 1e9
         pix_pos = ti.Vector([i, j])
         for k in range(line_seg_num):
-            sp = lsegs[k]
-            ep = lsegs[k + 1]
+            sp = points_field[k]
+            ep = points_field[k + 1]
             scope_id = is_in_scope(pix_pos, sp, ep)
+            distance = 1e9
             if is_in_scope(pix_pos, sp, ep) == 0:
-                distance = abs(tm.dot(pix_pos - sp, normal[k]))
+                distance = abs(tm.dot(pix_pos - sp, normal_field[k]))
             else:
                 pt = sp if scope_id & 1 else ep
                 distance = (pix_pos - pt).norm()
             min_value = min(min_value, distance)
-        pixels[i, j] = min_value
+        pixels[i, j] = 1. - min(min_value / scaler, 1.0)
 
-if __name__ == '__main__':
-    ti.init(arch = ti.gpu)
 
-    # Main logic is completed, some traits of taichi lang should be figured out
+def generate_random_chain(time: float, width: float, height: float, pnum: int = 5):
+    # generate SDF line segments
+    freq = 2 * np.pi / (width * 0.5)
+    w_margin = width * 0.05
+    h_margin = height * 0.05
+    half_height = (height - 2 * h_margin) / 2.
+    xs = np.linspace(w_margin, width - w_margin, pnum)
+    ys = half_height * np.sin(freq * (xs + time)) + height / 2
+    dxs = xs[1:] - xs[:-1]
+    dys = -(ys[1:] - ys[:-1])
+    normals = np.stack((dys, dxs), axis = 1)
+    normals /= np.linalg.norm(normals, axis = -1)[:, None]
+    
+    for i, (x, y) in enumerate(zip(xs, ys)):
+        points_field[i] = ti.Vector((x, y))
+    for i in range(pnum - 1):
+        normal_field[i] = ti.Vector(normals[i])
+
+gui = ti.GUI('SDF visualize', res = (W, H))
+
+for i in range(T):
+    generate_random_chain(i, W, H, PNUM)
+    draw_distance_field(100.0)
+    gui.set_image(pixels)
+    gui.show()
