@@ -7,7 +7,7 @@ Taichi Lang &amp; LLVM learning
 
 - Basic syntax and usage, being able to create some parallel visualized programs. Note that only one case will not be enough, therefore you can try to build more simple programs.
   - [x] SDF (DF) visualizer
-  - [ ] Marching squares
+  - [x] Marching squares
   - [ ] Cellular automata (simple playable one)
   - [ ] Multi-body simulation
 - Take a look at some examples will be good, too. Get inspired by others.

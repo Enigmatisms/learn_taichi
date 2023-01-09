@@ -26,29 +26,28 @@ def rand2d(min_x, min_y, max_x, max_y):
 
 @ti.data_oriented
 class MarchingSquareSDF:
-    def __init__(self, width, height, ball_prop: dict):
+    def __init__(self, width, height, properties: dict):
         self.w = width
         self.h = height
-        self.ball_max = ball_prop['max_radius']
-        self.ball_min = ball_prop['min_radius']
-        self.ball_num = ball_prop['ball_num']
+        self.threshold = properties['threshold']
+        self.ball_max  = properties['max_radius']
+        self.ball_min  = properties['min_radius']
+        self.ball_num  = properties['ball_num']
+        self.vel_bound = properties['velocity_bound']
         assert(self.ball_num < 16)                                              # up to 15 balls
-        self.vel_bound = ball_prop['velocity_bound']
 
         # boundary padding for SDF map (1 pixel for bottom right direction)
         self.sdf_maps = ti.field(dtype = ti.f32, shape = (width + 1, height + 1, self.ball_num))
-        self.tag_map = ti.field(dtype = ti.u16, shape = (width, height))        # tag map
-
+        self.sum_map  = ti.field(dtype = ti.f32, shape = (width + 1, height + 1))
         # RGB image is stored in vector.field
         self.pixels  = ti.Vector.field(3, dtype = ti.f32, shape = (width, height))     
 
-        self.ball_pos   = ti.Vector.field(2, ti.f32, self.ball_num)             # 2 dims (px, py, vx, vy, radius)
-        self.ball_vel   = ti.Vector.field(2, ti.f32, self.ball_num)             # 2 dims (px, py, vx, vy, radius)
-        self.ball_radii = ti.field(dtype = ti.f32, shape = self.ball_num)       # 1 dim (px, py, vx, vy, radius)
+        self.ball_radii = ti.field(dtype = ti.f32, shape = self.ball_num)       # 1 dim radius
+        self.ball_pos   = ti.Vector.field(2, ti.f32, self.ball_num)             # 2 dims (px, py)
+        self.ball_vel   = ti.Vector.field(2, ti.f32, self.ball_num)             # 2 dims (vx, vy)
         self.color_map  = ti.Vector.field(3, dtype = ti.f32, shape = self.ball_num)
         for i in range(self.ball_num):
             self.color_map[i] = COLOR_MAP[i]
-
         self.initialize_balls()
 
     @ti.kernel
@@ -57,8 +56,8 @@ class MarchingSquareSDF:
         for i in range(self.ball_num):
             radius = bound_rand(self.ball_min, self.ball_max)
             self.ball_radii[i] = radius
-            self.ball_pos[i] = rand2d(radius, radius, self.w - radius, self.h - radius)
-            self.ball_vel[i] = rand2d(-self.vel_bound, self.vel_bound, -self.vel_bound, self.vel_bound)
+            self.ball_pos[i]   = rand2d(radius, radius, self.w - radius, self.h - radius)
+            self.ball_vel[i]   = rand2d(-self.vel_bound, -self.vel_bound, self.vel_bound, self.vel_bound)
 
     def update_balls(self):
         # update ball position (boundary checks - velocity changes)
@@ -75,84 +74,49 @@ class MarchingSquareSDF:
     def calculate_sdf(self):
         # Note that SDF value is calculate per pixel (top-left corner)
         for i, j, ball_id in self.sdf_maps:
-            # calculate distance to ball indexed by ball_id
             # SDF calculated at pixel center
-            radius      = self.ball_radii[ball_id]
+            radius   = self.ball_radii[ball_id]
             ball_pos = self.ball_pos[ball_id]
-            pos = ti.Vector([i - 0.5, j - 0.5])
-            self.sdf_maps[i, j, ball_id] = (pos - ball_pos).norm() - radius
+            pos      = ti.Vector([i - 0.5, j - 0.5])
+            distance = (pos - ball_pos).norm() - radius
+            self.sdf_maps[i, j, ball_id] = ti.min(ti.exp(-0.1 * distance), 1.0)
     
     @ti.kernel
-    def calculate_tag(self):
-        for i, j, ball_id in self.sdf_maps:
-            # check the surrouding SDF values (4)
-            sur_vals = ti.Vector([
-                self.sdf_maps[i, j, ball_id],
-                self.sdf_maps[i + 1, j, ball_id],
-                self.sdf_maps[i, j + 1, ball_id],
-                self.sdf_maps[i + 1, j + 1, ball_id]
-            ])
-            all_non_pos = (sur_vals <= 0).all()
-            if all_non_pos:       # inside ball indexed by ball_id
-                tag = 1 << ball_id
-                ti.atomic_add(self.tag_map[i, j], tag)
-
-    def extract_indices(tag: ti.u16):
-        indices = []
-        for i in range(15):
-            if ((1 << i) & tag):
-                indices.append(i)
-        return indices
-
-    @ti.kernel
     def calculate_color(self):
-        for i, j in self.pixels:
-            # get tag and SDF value (add)
-            tag = self.tag_map[i, j]
-            # calculate color
-            if tag == 0:            # black for empty spot
-                self.pixels[i, j] = ti.Vector([0., 0., 0.])
-            else:
+        self.sum_map.fill(0.)
+        self.pixels.fill(0.)
+        for i, j, ball_id in self.sdf_maps:
+            self.sum_map[i, j] += self.sdf_maps[i, j, ball_id]
+        for i, j in self.sum_map:
+            sur_vals = ti.Vector([self.sum_map[i, j], self.sum_map[i + 1, j], 
+                    self.sum_map[i, j + 1], self.sum_map[i + 1, j + 1]]) - self.threshold
+            if (sur_vals >= 0).any():       # inside ball indexed by ball_id
                 out_color = ti.Vector([0., 0., 0.])
                 sum_dist = 0.
-                for idx in range(15):
-                    if ((1 << idx) & tag):
-                        radius = self.ball_radii[idx]
-                        rel_dist = (self.sdf_maps[i, j, idx] + radius) / radius
-                        dist = ti.math.exp(-5.0 * rel_dist)
-                        sum_dist  += dist
-                        out_color += self.color_map[idx] * dist
+                for idx in range(self.ball_num):
+                    dist = self.sdf_maps[i, j, idx]
+                    sum_dist  += dist
+                    out_color += self.color_map[idx] * dist
                 out_color /= sum_dist
                 self.pixels[i, j] = out_color
 
-    def reset_tag(self):
-        self.tag_map.fill(0x0000)
-
 if __name__ == "__main__":
-    W = 1280
-    H = 960
-    T = 10000000
-    BALL_NUM = 7
+    W = 800
+    H = 800
     ball_prop = {
-        'min_radius': 50., 'max_radius': 150.0,
-        'ball_num': 7, 'velocity_bound': 1.0
+        'min_radius': 50., 'max_radius': 120.0,
+        'ball_num': 12, 'velocity_bound': 5.0, 'threshold': 0.05
     }
 
-    ti.init(random_seed = 0)
+    ti.init(arch = ti.gpu, random_seed = 1)
     gui = ti.GUI('SDF visualize', res = (W, H))
 
     marcher = MarchingSquareSDF(W, H, ball_prop)
 
     while gui.running:
-        marcher.reset_tag()
         marcher.calculate_sdf()
-        marcher.calculate_tag()
         marcher.calculate_color()
         marcher.update_balls()
         gui.set_image(marcher.pixels)
         gui.show()
-
-
-
-
     
