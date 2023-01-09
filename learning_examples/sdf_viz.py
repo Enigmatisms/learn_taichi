@@ -41,7 +41,7 @@ def draw_distance_field(scaler: ti.f32):
         (Note1): kernel (if return anything), should have type annotation. For example:
         ```
         @ti.kernel
-        def get_dot(v1: ti.vector(2, ti.f32), ti.vector(2, ti.f32)):
+        def get_dot(v1: ti.vector(2, ti.f32), v2: ti.vector(2, ti.f32)):
             return ti.math.dot(v1, v2)
         ```
         (Note2): ti.math.dot (and some other similar functions) can not be called in Python scope
