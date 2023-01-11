@@ -15,7 +15,7 @@ Taichi Lang &amp; LLVM learning
 | :-----------------------------------------------: | :--------------------: |
 | <img src="assets/DF.gif" style="zoom:166.67%;" /> | ![](assets/ms-sdf.gif) |
 
-​		Related blog post in Chinese: [Taichi](https://enigmatisms.github.io/2023/01/11/Taichi-lLearning-I/)
+​		Related blog post in Chinese: [Taichi-Learning-I](https://enigmatisms.github.io/2023/01/11/Taichi-Learning-I/)
 
 - Take a look at some examples will be good, too. Get inspired by others.
 
