@@ -2,7 +2,7 @@
     Marching square SDF zero set visualization with taichi
     @date 2023.1.8
 """
-
+import tqdm
 import taichi as ti
 from color_map import COLOR_MAP
 
@@ -105,18 +105,34 @@ if __name__ == "__main__":
     H = 800
     ball_prop = {
         'min_radius': 50., 'max_radius': 120.0,
-        'ball_num': 12, 'velocity_bound': 5.0, 'threshold': 0.05
+        'ball_num': 12, 'velocity_bound': 7.5, 'threshold': 0.05
     }
+    write_video = True
 
     ti.init(arch = ti.gpu, random_seed = 1)
-    gui = ti.GUI('SDF visualize', res = (W, H))
 
     marcher = MarchingSquareSDF(W, H, ball_prop)
 
-    while gui.running:
-        marcher.calculate_sdf()
-        marcher.calculate_color()
-        marcher.update_balls()
-        gui.set_image(marcher.pixels)
-        gui.show()
+    if write_video:
+        frame_rate = 25
+        duration = 5.
+        result_dir = "./outputs"
+        video_manager = ti.tools.VideoManager(output_dir=result_dir, framerate=frame_rate, automatic_build=False)
+
+    if write_video:
+        for i in tqdm.tqdm(range(int(duration * frame_rate))):
+            marcher.calculate_sdf()
+            marcher.calculate_color()
+            marcher.update_balls()
+            pixels_img = marcher.pixels.to_numpy()
+            video_manager.write_frame(pixels_img)
+    else:
+        gui = ti.GUI('Marching Squares', res = (W, H))
+        time_t = 0
+        while gui.running:
+            marcher.calculate_sdf()
+            marcher.calculate_color()
+            marcher.update_balls()
+            gui.set_image(marcher.pixels)
+            gui.show()
     

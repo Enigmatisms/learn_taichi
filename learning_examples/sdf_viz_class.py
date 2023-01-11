@@ -6,6 +6,7 @@
     @date 2023.1.7
 """
 
+import tqdm
 import numpy as np
 import taichi as ti
 import taichi.math as tm
@@ -85,14 +86,28 @@ if __name__ == '__main__':
     H = 600
     PNUM = 6
     T = 1000000
-    ti.init(arch = ti.gpu)
-    gui = ti.GUI('SDF visualize', res = (W, H))
-    sdf = TaichiSDF(W, H, PNUM)
+    write_video = False
 
-    time_t = 0
-    while gui.running:
-        sdf.generate_random_chain(time_t % T)
-        sdf.draw_distance_field(100.0)
-        gui.set_image(sdf.pixels)
-        gui.show()
-        time_t += 1
+    ti.init(arch = ti.gpu)
+    sdf = TaichiSDF(W, H, PNUM)
+    if write_video:
+        frame_rate = 25
+        duration = 6.
+        result_dir = "./outputs"
+        video_manager = ti.tools.VideoManager(output_dir=result_dir, framerate=frame_rate, automatic_build=False)
+
+    if write_video:
+        for i in tqdm.tqdm(range(int(duration * frame_rate))):
+            sdf.generate_random_chain(i % T)
+            sdf.draw_distance_field(100.0)
+            pixels_img = sdf.pixels.to_numpy()
+            video_manager.write_frame(pixels_img)
+    else:
+        gui = ti.GUI('SDF visualize', res = (W, H))
+        time_t = 0
+        while gui.running:
+            sdf.generate_random_chain(time_t % T)
+            sdf.draw_distance_field(100.0)
+            gui.set_image(sdf.pixels)
+            gui.show()
+            time_t += 1
