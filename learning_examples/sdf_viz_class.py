@@ -95,8 +95,6 @@ if __name__ == '__main__':
         duration = 6.
         result_dir = "./outputs"
         video_manager = ti.tools.VideoManager(output_dir=result_dir, framerate=frame_rate, automatic_build=False)
-
-    if write_video:
         for i in tqdm.tqdm(range(int(duration * frame_rate))):
             sdf.generate_random_chain(i % T)
             sdf.draw_distance_field(100.0)

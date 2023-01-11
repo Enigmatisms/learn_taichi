@@ -118,8 +118,6 @@ if __name__ == "__main__":
         duration = 5.
         result_dir = "./outputs"
         video_manager = ti.tools.VideoManager(output_dir=result_dir, framerate=frame_rate, automatic_build=False)
-
-    if write_video:
         for i in tqdm.tqdm(range(int(duration * frame_rate))):
             marcher.calculate_sdf()
             marcher.calculate_color()
