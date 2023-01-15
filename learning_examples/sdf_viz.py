@@ -10,17 +10,6 @@ import taichi as ti
 import numpy as np
 import taichi.math as tm
 
-
-W = 800
-H = 600
-T = 1000000
-PNUM = 8
-
-ti.init(arch = ti.gpu)
-pixels = ti.field(dtype=float, shape=(W, H))
-points_field = ti.Vector.field(2, dtype = ti.f32, shape = PNUM)
-normal_field = ti.Vector.field(2, dtype = ti.f32, shape = PNUM - 1)
-
 @ti.func
 def is_in_scope(pix_pos, t1, t2):
     vec = t2 - t1
@@ -34,7 +23,7 @@ def is_in_scope(pix_pos, t1, t2):
     return ret
 
 @ti.kernel
-def draw_distance_field(scaler: ti.f32):
+def draw_distance_field(pixels: ti.template(), points_field: ti.template(), normal_field: ti.template(), scaler: ti.f32):
     """
         FIXME: Note that we might not be able to input field as arguments? this must be changed \\
         - Note that, we can not input field as argument, since I can not annotate it with right type...
@@ -72,7 +61,7 @@ def draw_distance_field(scaler: ti.f32):
         pixels[i, j] = 1. - min(min_value / scaler, 1.0)
 
 
-def generate_random_chain(time: float, width: float, height: float, pnum: int = 5):
+def generate_random_chain(points_field: ti.template(), normal_field: ti.template(), time: float, width: float, height: float, pnum: int = 5):
     # generate SDF line segments
     freq = 2 * np.pi / (width * 0.5)
     w_margin = width * 0.05
@@ -90,10 +79,21 @@ def generate_random_chain(time: float, width: float, height: float, pnum: int = 
     for i in range(pnum - 1):
         normal_field[i] = ti.Vector(normals[i])
 
-gui = ti.GUI('SDF visualize', res = (W, H))
+if __name__ == "__main__":
 
-for i in range(T):
-    generate_random_chain(i, W, H, PNUM)
-    draw_distance_field(100.0)
-    gui.set_image(pixels)
-    gui.show()
+    W = 800
+    H = 600
+    T = 1000000
+    PNUM = 8
+
+    ti.init(arch = ti.gpu)
+    gui = ti.GUI('SDF visualize', res = (W, H))
+    pixels = ti.field(dtype=float, shape=(W, H))
+    p_field = ti.Vector.field(2, dtype = ti.f32, shape = PNUM)
+    n_field = ti.Vector.field(2, dtype = ti.f32, shape = PNUM - 1)
+
+    for i in range(T):
+        generate_random_chain(p_field, n_field, i, W, H, PNUM)
+        draw_distance_field(pixels, p_field, n_field, 100.0)
+        gui.set_image(pixels)
+        gui.show()
