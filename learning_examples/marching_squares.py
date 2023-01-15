@@ -5,6 +5,7 @@
 import tqdm
 import taichi as ti
 from color_map import COLOR_MAP
+from utils import *
 
 """
     Color mixing strategy: Since the border of SDF (zero-set) is drawn as pure white (black background)
@@ -14,15 +15,6 @@ from color_map import COLOR_MAP
     if a pixel is inside the corresponding ball. The color of a negative valued pixel (or tagged with non-zero u8)
     will be the convex weighted average of the color of each participating ball.
 """
-
-@ti.func
-def bound_rand(mini: ti.f32, maxi: ti.f32) -> ti.f32:
-    diff = maxi - mini
-    return diff * ti.random(ti.f32) + mini
-
-@ti.func
-def rand2d(min_x, min_y, max_x, max_y):
-    return ti.Vector([bound_rand(min_x, max_x), bound_rand(min_y, max_y)])
 
 @ti.data_oriented
 class MarchingSquareSDF:
@@ -107,7 +99,7 @@ if __name__ == "__main__":
         'min_radius': 50., 'max_radius': 120.0,
         'ball_num': 12, 'velocity_bound': 7.5, 'threshold': 0.05
     }
-    write_video = True
+    write_video = False
 
     ti.init(arch = ti.gpu, random_seed = 1)
 
