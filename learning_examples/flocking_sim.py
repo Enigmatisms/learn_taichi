@@ -256,18 +256,20 @@ class Pigeons(FlockBase):
         self.atom_ptr.fill(0)
         
 if __name__ == "__main__":
+    ti.init(random_seed = 1)
     W = 1040
     H = 800
-    last_one_human = True
-    ti.init(random_seed = 1)
+    last_one_human = False
+    write_video = False
+
     pigeon_prop = {'boid_num': 64, 'vel_alpha': 0.995, 'ang_alpha': 0.1, 
             'vel_clip': 0.6, 'turn_proba': 0.005, 'vel': 3.0, 
-            'border': 40, 'sep_max': 1.0, 'coh_max': 0.4, 'critical_r': 50,
+            'border': 50, 'sep_max': 1.0, 'coh_max': 0.4, 'critical_r': 50,
             'align_w': 0.2,'mate_radius': 80, 'alert_r': 120}
 
-    predator_prop = {'boid_num': 2, 'vel_alpha': 0.995, 'ang_alpha': 0.1, 
+    predator_prop = {'boid_num': 4, 'vel_alpha': 0.995, 'ang_alpha': 0.1, 
             'vel_clip': 0.8, 'turn_proba': 0.001, 'vel': 2.9, 
-            'border': 40, 'hunt_radius': 400, 'predator_kp': 2.0}
+            'border': 50, 'hunt_radius': 400, 'predator_kp': 2.0}
 
     pigeons   = Pigeons(W, H, pigeon_prop)
     predators = Predators(W, H, predator_prop)
@@ -276,6 +278,14 @@ if __name__ == "__main__":
         predators.human_ctrl[-1] = 1
 
     gui = ti.GUI('Marching Squares', res = (W, H))
+
+    if write_video:
+        import tqdm
+        frame_rate = 24
+        frame_duration = 10          # interger seconds
+        frames = frame_rate * frame_duration
+        video_manager = ti.tools.VideoManager(output_dir="./outputs/", framerate=25, automatic_build=False)
+        pbar = tqdm.tqdm(total = frame_rate * frame_duration)
     while gui.running:
         for e in gui.get_events(gui.PRESS):
             if e.key == gui.ESCAPE:
@@ -283,7 +293,7 @@ if __name__ == "__main__":
         pigeons.reset_status()
         pigeons.boid_random_vel()
         pigeons.boid_pos_update(predators.pos, predators.boid_num)
-
+        
         cursor_x, cursor_y = gui.get_cursor_pos()
         predators.boid_random_vel()
         predators.prey(pigeons.pos, pigeons.mask_grids, pigeons.atom_ptr, vec2f([cursor_x * W, cursor_y * H]), pigeons.radius)
@@ -297,4 +307,13 @@ if __name__ == "__main__":
         # Draw Predators
         gui.triangles(pd_p1, pd_p2, pd_p3, color = 0xFF0000)
         gui.triangles(pd_p1, pd_p2, pd_p3_sym, color = 0xFF0000)
-        gui.show()
+        if write_video:
+            video_manager.write_frame(gui.get_image())
+            pbar.update()
+            gui.clear()
+            if pbar.last_print_n >= frames:
+                break
+        else:
+            gui.show()
+    if write_video:
+        pbar.close()

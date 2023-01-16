@@ -9,7 +9,7 @@ Taichi Lang &amp; LLVM learning
   - [x] SDF (DF) visualizer
   - [x] Marching squares
   - [x] Cellular automata (simple playable one)
-  - [ ] Multi-body simulation
+  - [x] Multi-body simulation
 
 |           Distance Field visualization            |  SDF marching squares  | Cellular Automata  |
 | :-----------------------------------------------: | :--------------------: | :----------------: |
