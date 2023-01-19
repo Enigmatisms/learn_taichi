@@ -1,0 +1,99 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!-- A test file for mitsuba-like scene xml file parser -->
+<!-- Author: Qianyue He / Original credit goes to Wenzel Jakob -->
+<!-- Only Steady state rendering are supported -->
+<!-- Only RGB or sRGB spectrums are supported -->
+<scene version="1.0">
+	<sensor type="perspective">
+		<float name="nearClip" value="0.001"/>
+		<float name="farClip" value="2000"/>
+		<float name="fov" value="39.3077"/>
+        <integer name="sampleCount" value="512"/>
+
+		<transform name="toWorld">
+			<lookat target="2.78, 2.73, -7.99" origin="2.78, 2.73, -8.00" up="0, 1, 0"/>
+		</transform>
+
+		<film type="film">
+			<integer name="width" value="512"/>
+			<integer name="height" value="512"/>
+			<integer name="subSamples" value="8"/>
+		</film>
+	</sensor>
+
+	<bsdf type="diffuse" id="box">
+		<srgb name="reflectance" value="#BCBCBC"/>
+	</bsdf>
+
+	<bsdf type="diffuse" id="white">
+		<srgb name="reflectance" value="#BDBDBD"/>
+	</bsdf>
+
+	<bsdf type="diffuse" id="red">
+		<srgb name="reflectance" value="#DD2525"/>
+	</bsdf>
+
+	<bsdf type="diffuse" id="green">
+		<srgb name="reflectance" value="#25DD25"/>
+	</bsdf>
+
+	<bsdf type="diffuse" id="light">
+		<srgb name="reflectance" value="#FFFFFF"/>
+	</bsdf>
+
+	<shape type="obj">
+		<string name="filename" value="meshes/cbox_luminaire.obj"/>
+		<transform name="toWorld">
+			<translate x="0" y="-0.002" z="0"/>
+		</transform>
+		<!-- <emitter type="area">
+			<srgb name="reflectance" value="#FFFFFF"/>
+		</emitter> -->
+	</shape>
+
+	<emitter type="point">
+		<srgb name="reflectance" value="#FFFFFF"/>
+		<point name="position" x="2.79" y="2.73" z="-8.01"/>
+	</emitter>
+
+	<shape type="obj">
+		<string name="filename" value="meshes/cbox_floor.obj"/>
+
+		<ref id="white"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="meshes/cbox_ceiling.obj"/>
+
+		<ref id="white"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="meshes/cbox_back.obj"/>
+		<ref id="white"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="meshes/cbox_greenwall.obj"/>
+
+		<ref id="green"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="meshes/cbox_redwall.obj"/>
+
+		<ref id="red"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="meshes/cbox_smallbox.obj"/>
+
+		<ref id="box"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="meshes/cbox_largebox.obj"/>
+
+		<ref id="box"/>
+	</shape>
+</scene>
