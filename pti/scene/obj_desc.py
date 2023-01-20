@@ -4,7 +4,6 @@
 """
 
 import numpy as np
-from typing import List
 from obj_loader import *
 from numpy import ndarray as Arr
 

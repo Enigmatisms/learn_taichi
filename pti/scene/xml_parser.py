@@ -21,13 +21,20 @@ from numpy import ndarray as Arr
     level 1    AABB1 (tri1 tri2 tri3)     AABB2 (tri4 tri5 tri6)     AABB3 (tri4 tri5 tri6)
 """
 
-
-
 def parse_emitters(em_elem: list):
     """
-        Parsing scene emitters from list of xml nodes
-        only [Point], [Area], [Directional] are supported
+        Parsing scene emitters from list of xml nodes \\
+        only [Point], [Area], [Directional] are supported \\
+        TODO: Simple emitter parser for direct illumination can be implemented
+        - for example, point light source is the simplest of call
+        - rasterizer should have two functionalities: 
+            - point source direct illumination (Phong model)
+            - depth map rasterization
     """
+    for elem in em_elem:
+        emitter_type = elem.get("type")
+        if emitter_type == "point":
+            pass
     return []
 
 def parse_wavefront(directory: str, obj_list: List[xet.Element]) -> List[Arr]:
@@ -52,6 +59,7 @@ def parse_bsdf(obj_list: list):
     """
         Parsing wavefront obj file (filename) from list of xml nodes    
         note that participating medium is complex, therefore will not be added in the early stage
+        FIXME: bsdf is of the lowest priority, only after rasterizer is completed can this gets implemented
     """
     return []
 

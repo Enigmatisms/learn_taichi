@@ -13,7 +13,7 @@ from typing import Tuple
 from numpy import ndarray as Arr
 from scipy.spatial.transform import Rotation as Rot
 
-__supported_rot_types__ = ("euler", "quaternion", "angle-axis")
+# supported_rot_type = ("euler", "quaternion", "angle-axis")
 
 def get(node: xet.Element, name: str, _type = float):
     return _type(node.get(name))
@@ -44,7 +44,7 @@ def load_obj_file(path: str, precomp_normal = True, verbose = False):
         print(f"Mesh loaded from {path}, output shape: {mesh_faces.shape}. Normal output: {precomp_normal}")
     return mesh_faces, normals
 
-def parse_transform(transform_elem: xet.Element) -> Tuple[Arr, Arr]:
+def transform_parse(transform_elem: xet.Element) -> Tuple[Arr, Arr]:
     """
         Note that: extrinsic rotation is not supported, 
         meaning that we can only rotate around the object centroid,
@@ -57,20 +57,19 @@ def parse_transform(transform_elem: xet.Element) -> Tuple[Arr, Arr]:
             trans_t = np.float32([get(child, "x"), get(child, "y"), get(child, "z")])
         elif child.tag == "rotate":
             rot_type = child.get("type")
-            if not rot_type in __supported_rot_types__:
-                raise ValueError(f"Unsupported rotation representation '{rot_type}'")
+            if rot_type == "euler":
+                r_angle = get(child, "r")   # roll
+                p_angle = get(child, "p")   # pitch
+                y_angle = get(child, "y")   # yaw
+                trans_r = Rot.from_euler("xyz", (r_angle, p_angle, y_angle), degrees = True).as_matrix()
+            elif rot_type == "quaternion":
+                trans_r = Rot.from_quat([get(child, "x"), get(child, "y"), get(child, "z"), get(child, "w")])
+            elif rot_type == "angle-axis":
+                axis: Arr = np.float32([get(child, "x"), get(child, "y"), get(child, "z")])
+                axis /= np.linalg.norm(axis) * get(child, "angle") / 180. * np.pi
+                trans_r = Rot.from_rotvec(axis)
             else:
-                if rot_type == "euler":
-                    r_angle = get(child, "r")   # roll
-                    p_angle = get(child, "p")   # pitch
-                    y_angle = get(child, "y")   # yaw
-                    trans_r = Rot.from_euler("xyz", (r_angle, p_angle, y_angle), degrees = True).as_matrix()
-                elif rot_type == "quaternion":
-                    trans_r = Rot.from_quat([get(child, "x"), get(child, "y"), get(child, "z"), get(child, "w")])
-                else:
-                    axis: Arr = np.float32([get(child, "x"), get(child, "y"), get(child, "z")])
-                    axis /= np.linalg.norm(axis) * get(child, "angle") / 180. * np.pi
-                    trans_r = Rot.from_rotvec(axis)
+                raise ValueError(f"Unsupported rotation representation '{rot_type}'")
         else:
             raise ValueError(f"Unsupported transformation representation '{child.tag}'")
     # Note that, trans_r (rotation) is defualt to be intrinsic (apply under the centroid coordinate)

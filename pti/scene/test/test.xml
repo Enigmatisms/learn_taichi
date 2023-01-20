@@ -65,7 +65,7 @@
 	</shape>
 
 	<emitter type="point">
-		<srgb name="reflectance" value="#FFFFFF"/>
+		<rgb name="reflectance" value="#FFFFFF"/>
 		<point name="position" x="2.79" y="2.73" z="-8.01"/>
 	</emitter>
 
