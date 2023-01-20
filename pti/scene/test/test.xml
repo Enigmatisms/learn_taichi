@@ -43,8 +43,21 @@
 
 	<shape type="obj">
 		<string name="filename" value="meshes/cbox_luminaire.obj"/>
+		<!-- Rigid-body transformation defined in world frame -->
+		<!-- Angle are of unit 'degree', not 'rads' -->
 		<transform name="toWorld">
 			<translate x="0" y="-0.002" z="0"/>
+			<!-- Three types of rotation are supported -->
+			<!-- <rotate type="quaternion" x="0" y="0" z="0" w="0"/> -->
+
+			<!-- For simple rotation, angle-axis / euler are recommended -->
+			<!-- <rotate type="angle-axis" x="0" y="0" z="0" angle="0"/> -->
+
+			<!--Roll Pitch Yaw Description, note that mitsuba coordinates ar
+				x - lateral translation, y: height, z: depth, therefore 
+				roll spins around z, pitch spins around x, yaw spins around y
+			-->
+			<!-- <rotate type="euler" r="0" p="0" y="0"/> -->
 		</transform>
 		<!-- <emitter type="area">
 			<srgb name="reflectance" value="#FFFFFF"/>

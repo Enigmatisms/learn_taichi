@@ -6,11 +6,22 @@
     @date 2023.1.18
 """
 
+import os
 import numpy as np
+import xml.etree.ElementTree as xet
+
 from typing import List
 from obj_loader import *
+from obj_desc import ObjDescriptor
 from numpy import ndarray as Arr
-import xml.etree.ElementTree as xet
+
+"""
+    Actually I think in Taichi, we can leverage SSDS:
+    AABB and triangles are on the same level (attached to the same node)
+    level 1    AABB1 (tri1 tri2 tri3)     AABB2 (tri4 tri5 tri6)     AABB3 (tri4 tri5 tri6)
+"""
+
+
 
 def parse_emitters(em_elem: list):
     """
@@ -19,22 +30,22 @@ def parse_emitters(em_elem: list):
     """
     return []
 
-def parse_wavefront(obj_list: List[xet.Element]) -> List[Arr]:
+def parse_wavefront(directory: str, obj_list: List[xet.Element]) -> List[Arr]:
     """
         Parsing wavefront obj file (filename) from list of xml nodes    
         TODO: the first function to implement (rasterizer)
     """
     all_objs = []
     for elem in obj_list:
-        obj = np.empty(0, dtype = np.float32)                   # obj should a bunch of triangles
         trans_r, trans_t = None, None                           # transform
         for children in elem:
             if children.tag == "string":
-                obj = load_obj_file(children.get("value"))
+                meshes, normals = load_obj_file(os.path.join(directory, children.get("value")))
             elif children.tag == "transform":
                 trans_r, trans_t = parse_transform(children)
-        obj = apply_transform(obj, trans_r, trans_t)
-        all_objs.append(obj)
+        meshes, normals = apply_transform(meshes, normals, trans_r, trans_t)
+        # AABB calculation should be done after transformation
+        all_objs.append(ObjDescriptor(meshes, normals, trans_r, trans_t))
     return all_objs
 
 def parse_bsdf(obj_list: list):
@@ -56,8 +67,9 @@ def empty_or_front(lst: list, aux: str = "sensors"):
         raise ValueError(f"List contains {aux} should not be empty")
     return lst[0]
 
-def mitsuba_parsing(path: str):
-    node_tree = xet.parse(path)
+def mitsuba_parsing(directory: str, file: str):
+    xml_file = os.path.join(directory, file)
+    node_tree = xet.parse(xml_file)
     root_node = node_tree.getroot()
     version_tag = root_node.attrib["version"]
     if not version_tag == "1.0":
@@ -72,10 +84,10 @@ def mitsuba_parsing(path: str):
     sensor_node     = empty_or_front(filter_func(children, "sensor"))
     emitter_configs = parse_emitters(emitter_nodes)
     bsdf_configs    = parse_bsdf(bsdf_nodes)
-    meshes          = parse_wavefront(shape_nodes)
+    meshes          = parse_wavefront(directory, shape_nodes)
     configs         = parse_global_sensor(sensor_node)
     return emitter_configs, bsdf_configs, meshes, configs
 
 if __name__ == "__main__":
-    emitter_configs, bsdf_configs, meshes, configs = mitsuba_parsing("./test/test.xml")
+    emitter_configs, bsdf_configs, meshes, configs = mitsuba_parsing("./test/", "test.xml")
     print(emitter_configs, bsdf_configs, meshes, configs)
