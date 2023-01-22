@@ -21,6 +21,7 @@ class ObjDescriptor:
         """
             Inputs are objects on which transformations have been applied already
         """
+        self.tri_num = meshes.shape[0]
         self.meshes = meshes
         self.normals = normals
         self.R = R

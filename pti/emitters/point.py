@@ -21,7 +21,7 @@ class PointSource(LightSource):
         pos_elem = elem.find("point")
         print(pos_elem, elem.tag)
         assert(pos_elem is not None)
-        self.pos = vec3d_parse(pos_elem)
+        self.pos: np.ndarray = vec3d_parse(pos_elem)
 
     def sample(self):
         raise NotImplementedError("To be implemented.")
