@@ -5,15 +5,25 @@
     @author Qianyue He (Enigmatisms)
     @date 2023.1.18
 """
-
 import os
+import sys
+sys.path.append("..")
+
 import numpy as np
 import xml.etree.ElementTree as xet
 
 from typing import List
 from obj_loader import *
-from obj_desc import ObjDescriptor
 from numpy import ndarray as Arr
+from scene.obj_desc import ObjDescriptor
+from scene.general_parser import get, transform_parse
+
+# import emitters
+from emitters.point import PointSource
+from emitters.rect_area import RectAreaSource
+from emitters.directional import DirectionalSource
+
+__MAPPING__ = {"integer": int, "float": float, "string": str}
 
 """
     Actually I think in Taichi, we can leverage SSDS:
@@ -24,33 +34,36 @@ from numpy import ndarray as Arr
 def parse_emitters(em_elem: list):
     """
         Parsing scene emitters from list of xml nodes \\
-        only [Point], [Area], [Directional] are supported \\
-        TODO: Simple emitter parser for direct illumination can be implemented
+        only [Point], [Area], [Directional] are supported
         - for example, point light source is the simplest of call
         - rasterizer should have two functionalities: 
             - point source direct illumination (Phong model)
             - depth map rasterization
     """
+    sources = []
     for elem in em_elem:
         emitter_type = elem.get("type")
         if emitter_type == "point":
-            pass
-    return []
+            sources.append(PointSource(elem))
+        elif emitter_type == "rect_area":
+            sources.append(RectAreaSource(elem))
+        elif emitter_type == "directional":
+            sources.append(DirectionalSource(elem))
+    return sources
 
 def parse_wavefront(directory: str, obj_list: List[xet.Element]) -> List[Arr]:
     """
         Parsing wavefront obj file (filename) from list of xml nodes    
-        TODO: the first function to implement (rasterizer)
     """
     all_objs = []
     for elem in obj_list:
         trans_r, trans_t = None, None                           # transform
-        for children in elem:
-            if children.tag == "string":
-                meshes, normals = load_obj_file(os.path.join(directory, children.get("value")))
-            elif children.tag == "transform":
-                trans_r, trans_t = parse_transform(children)
-        meshes, normals = apply_transform(meshes, normals, trans_r, trans_t)
+        filepath_child      = elem.find("string")
+        meshes, normals     = load_obj_file(os.path.join(directory, filepath_child.get("value")))
+        transform_child     = elem.find("transform")
+        if transform_child is not None:
+            trans_r, trans_t    = transform_parse(transform_child)
+            meshes, normals     = apply_transform(meshes, normals, trans_r, trans_t)
         # AABB calculation should be done after transformation
         all_objs.append(ObjDescriptor(meshes, normals, trans_r, trans_t))
     return all_objs
@@ -68,12 +81,17 @@ def parse_global_sensor(sensor_elem: xet.Element):
         Parsing sensor (there can only be one sensor)
         Other global configs related to film, etc. are loaded here
     """
-    return dict()
+    sensor_config = {}
+    for elem in sensor_elem:
+        if elem.tag in __MAPPING__:
+            name = elem.get("name")
+            sensor_config[name] = get(elem, "value", __MAPPING__[elem.tag])
 
-def empty_or_front(lst: list, aux: str = "sensors"):
-    if not lst:
-        raise ValueError(f"List contains {aux} should not be empty")
-    return lst[0]
+    sensor_config["transform"]  = transform_parse(sensor_elem.find("transform"))
+    film_elems                  = sensor_elem.find("film").findall("integer")
+    assert(len(film_elems) >= 3)        # at least width, height and sample count (meaningless for rasterizer)
+    sensor_config["film"]       = np.int32([get(int_elem, "value", int) for int_elem in film_elems])
+    return sensor_config
 
 def mitsuba_parsing(directory: str, file: str):
     xml_file = os.path.join(directory, file)
@@ -83,13 +101,11 @@ def mitsuba_parsing(directory: str, file: str):
     if not version_tag == "1.0":
         raise ValueError(f"Unsupported version {version_tag}. Only '1.0' is supported right now.")  
     # Export list of dict for emitters / dict for other secen settings and film settings / list for obj files
-    children = [child for child in root_node]
-    xet.Element
-    filter_func = lambda iterable, tag: list(filter(lambda x: x.tag == tag, iterable))
-    emitter_nodes   = filter_func(children, "emitter")
-    bsdf_nodes      = filter_func(children, "bsdf")
-    shape_nodes     = filter_func(children, "shape")
-    sensor_node     = empty_or_front(filter_func(children, "sensor"))
+    emitter_nodes   = root_node.findall("emitter")
+    bsdf_nodes      = root_node.findall("bsdf")
+    shape_nodes     = root_node.findall("shape")
+    sensor_node     = root_node.find("sensor")
+    assert(sensor_node)
     emitter_configs = parse_emitters(emitter_nodes)
     bsdf_configs    = parse_bsdf(bsdf_nodes)
     meshes          = parse_wavefront(directory, shape_nodes)

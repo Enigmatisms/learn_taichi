@@ -5,13 +5,23 @@
     sampling is not yet implemented (2023.1.20 version)
 """
 
+import sys
+sys.path.append("..")
+
 import numpy as np
-from abtract_source import LightSource
+import xml.etree.ElementTree as xet
+
+from emitters.abtract_source import LightSource
+from scene.general_parser import rgb_parse, vec3d_parse
+
 
 class PointSource(LightSource):
-    def __init__(self, position, intensity):
-        super().__init__(intensity, "point")
-        self.pos = position
+    def __init__(self, elem: xet.Element):
+        super().__init__(elem, "point")
+        pos_elem = elem.find("point")
+        print(pos_elem, elem.tag)
+        assert(pos_elem is not None)
+        self.pos = vec3d_parse(pos_elem)
 
     def sample(self):
         raise NotImplementedError("To be implemented.")

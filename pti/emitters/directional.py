@@ -2,9 +2,18 @@
     TODO: Directional light source (global paralleled ray light source)
 """
 
-from abtract_source import LightSource
+import sys
+sys.path.append("..")
+
+import numpy as np
+import xml.etree.ElementTree as xet
+
+from emitters.abtract_source import LightSource
+from scene.general_parser import vec3d_parse
 
 class DirectionalSource(LightSource):
-    def __init__(self, intensity):
-        super().__init__(intensity, "directional")
-        raise NotImplementedError("Maybe in the future, mate.")
+    def __init__(self, elem: xet.Element):
+        super().__init__(elem, "directional")
+        dir_elem = elem.find("point")
+        assert(dir_elem)
+        self.direction = vec3d_parse(dir_elem)
