@@ -21,24 +21,30 @@
 		</film>
 	</sensor>
 
-	<bsdf type="diffuse" id="box">
-		<srgb name="reflectance" value="#BCBCBC"/>
+	<bsdf type="blinn-phong" id="box">
+		<!-- <srgb name="reflectance" value="#BCBCBC"/> -->
+		<!-- For simple rasterizer, shininess define the glossiness, 1.0 being the smallest value -->
+		<float name="shininess" value="6.0"/>
 	</bsdf>
 
-	<bsdf type="diffuse" id="white">
-		<srgb name="reflectance" value="#BDBDBD"/>
+	<bsdf type="blinn-phong" id="white">
+		<!-- <srgb name="reflectance" value="#BDBDBD"/> -->
+		<float name="shininess" value="2.0"/>
 	</bsdf>
 
-	<bsdf type="diffuse" id="red">
-		<srgb name="reflectance" value="#DD2525"/>
+	<bsdf type="blinn-phong" id="floor">
+		<!-- <srgb name="reflectance" value="#DD2525"/> -->
+		<float name="shininess" value="1.0"/>
 	</bsdf>
 
-	<bsdf type="diffuse" id="green">
-		<srgb name="reflectance" value="#25DD25"/>
+	<bsdf type="blinn-phong" id="left_wall">
+		<!-- <srgb name="reflectance" value="#25DD25"/> -->
+		<float name="shininess" value="3.0"/>
 	</bsdf>
 
-	<bsdf type="diffuse" id="light">
-		<srgb name="reflectance" value="#FFFFFF"/>
+	<bsdf type="blinn-phong" id="right_wall">
+		<!-- <srgb name="reflectance" value="#FFFFFF"/> -->
+		<float name="shininess" value="4.0"/>
 	</bsdf>
 
 	<shape type="obj">
@@ -59,6 +65,7 @@
 			-->
 			<!-- <rotate type="euler" r="0" p="0" y="0"/> -->
 		</transform>
+		<ref id="white"/>
 		<!-- <emitter type="area">
 			<srgb name="reflectance" value="#FFFFFF"/>
 		</emitter> -->
@@ -71,8 +78,7 @@
 
 	<shape type="obj">
 		<string name="filename" value="meshes/cbox_floor.obj"/>
-
-		<ref id="white"/>
+		<ref id="floor"/>
 	</shape>
 
 	<shape type="obj">
@@ -83,25 +89,25 @@
 
 	<shape type="obj">
 		<string name="filename" value="meshes/cbox_back.obj"/>
-		<ref id="white"/>
+		<ref id="floor"/>
 	</shape>
 
 	<shape type="obj">
 		<string name="filename" value="meshes/cbox_greenwall.obj"/>
 
-		<ref id="green"/>
+		<ref id="right_wall"/>
 	</shape>
 
 	<shape type="obj">
 		<string name="filename" value="meshes/cbox_redwall.obj"/>
 
-		<ref id="red"/>
+		<ref id="left_wall"/>
 	</shape>
 
 	<shape type="obj">
 		<string name="filename" value="meshes/cbox_smallbox.obj"/>
 
-		<ref id="box"/>
+		<ref id="white"/>
 	</shape>
 
 	<shape type="obj">

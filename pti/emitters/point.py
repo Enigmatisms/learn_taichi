@@ -12,16 +12,19 @@ import numpy as np
 import xml.etree.ElementTree as xet
 
 from emitters.abtract_source import LightSource
-from scene.general_parser import rgb_parse, vec3d_parse
+from scene.general_parser import vec3d_parse
 
 
 class PointSource(LightSource):
-    def __init__(self, elem: xet.Element):
+    def __init__(self, elem: xet.Element = None):
         super().__init__(elem, "point")
-        pos_elem = elem.find("point")
-        print(pos_elem, elem.tag)
-        assert(pos_elem is not None)
-        self.pos: np.ndarray = vec3d_parse(pos_elem)
+        if elem is not None:
+            pos_elem = elem.find("point")
+            print(pos_elem, elem.tag)
+            assert(pos_elem is not None)
+            self.pos: np.ndarray = vec3d_parse(pos_elem)
+        else:
+            self.pos = np.zeros(3, np.float32)
 
     def sample(self):
         raise NotImplementedError("To be implemented.")

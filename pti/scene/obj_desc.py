@@ -4,7 +4,6 @@
 """
 
 import numpy as np
-from obj_loader import *
 from numpy import ndarray as Arr
 
 def get_aabb(meshes: Arr) -> Arr:
@@ -17,7 +16,7 @@ def get_aabb(meshes: Arr) -> Arr:
     return np.float32((mini, maxi))
 
 class ObjDescriptor:
-    def __init__(self, meshes, normals, R = None, t = None):
+    def __init__(self, meshes, normals, bsdf, R = None, t = None):
         """
             Inputs are objects on which transformations have been applied already
         """
