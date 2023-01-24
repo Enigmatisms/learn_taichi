@@ -26,8 +26,8 @@ _Vec3 = ttype.vector(3, ti.f32)
 class BlinnPhongRasterizer:
     """
         Rasterizer using Bary-centric coordinates
-        origin + direction * t = u * PA(vec) + v * PB(vec)
-        This is a rank-3 linear equation
+        origin + direction * t = u * PA(vec) + v * PB(vec) + P
+        This is a rank-3 matrix linear equation
     """
     def __init__(self, emitter: PointSource, objects: List[ObjDescriptor], prop: dict):
         # This should be extended
@@ -39,7 +39,6 @@ class BlinnPhongRasterizer:
 
         self.num_objects = len(objects)
         max_tri_num = max([obj.tri_num for obj in objects])
-        self.emit_pos = ti.Vector(emitter.pos, dt = ti.f32)                 # currently there should be only one light source
         self.emit_int = ti.Vector(emitter.intensity, dt = ti.f32)       
 
         self.cam_orient = prop['transform'][0]                              # first field is camera orientation
@@ -56,10 +55,6 @@ class BlinnPhongRasterizer:
         self.shininess  = ti.field(ti.f32, self.num_objects)
         self.mesh_cnt   = ti.field(ti.i32, self.num_objects)
         self.depth_map  = ti.field(ti.f32, (self.w, self.w))                # gray-scale
-        """
-            - [] AABB check to be implemented
-            Iterate through all pixels for a rasterizer
-        """
         self.pixels = ti.Vector.field(3, ti.f32, (self.w, self.w))
         self.initialze(objects)
 
@@ -155,7 +150,7 @@ class BlinnPhongRasterizer:
         return ti.min(1.0 / (1e-5 + x ** 2), 1e5)
 
     @ti.kernel
-    def render(self):
+    def render(self, emit_pos: _Vec3):
         for i, j in self.pixels:
             ray = self.pix2ray(i, j)
             obj_id, tri_id, min_depth = self.ray_intersect(ray, self.cam_t)
@@ -165,7 +160,7 @@ class BlinnPhongRasterizer:
                 # Calculate Blinn-Phong lighting model
                 normal = self.normals[obj_id, tri_id]
                 hit_point  = ray * min_depth + self.cam_t
-                to_emitter = self.emit_pos - hit_point
+                to_emitter = emit_pos - hit_point
                 emitter_d  = to_emitter.norm()
                 light_dir  = to_emitter / emitter_d
                 # light_dir and ray are normalized, ray points from cam to hit point
@@ -176,6 +171,14 @@ class BlinnPhongRasterizer:
                 if self.does_intersect(light_dir, hit_point, emitter_d):
                     spec *= 0.1
                 self.pixels[i, j] = spec * self.emit_int
+            else:
+                self.depth_map[i, j] = 0.0
+                self.pixels[i, j].fill(0.0)
+
+    @ti.kernel
+    def reset(self):
+        for i, j in self.pixels:
+            self.pixels[i, j].fill(0.0)
     
     @ti.func
     def aabb_test(self, aabb_idx, ray: _Vec3, ray_o: _Vec3):
@@ -191,17 +194,42 @@ class BlinnPhongRasterizer:
         return t_near < t_far
 
 if __name__ == "__main__":
-    profiling = True
+    profiling = False
     ti.init(kernel_profiler = profiling)
     emitter_configs, _, meshes, configs = mitsuba_parsing("../scene/test/", "test.xml")
-    bpr = BlinnPhongRasterizer(emitter_configs[0], meshes, configs)
+    emitter = emitter_configs[0]
+    emitter_pos = _Vec3(emitter.pos)
+    bpr = BlinnPhongRasterizer(emitter, meshes, configs)
     # Note that direct test the rendering time (once) is meaningless, executing for the first time
     # will be accompanied by JIT compiling, compilation time will be included.
-    bpr.render()
-    if profiling:
-        ti.profiler.print_kernel_profiler_info() 
-    ti.tools.imwrite(bpr.pixels.to_numpy(), "./blinn-phong.png")
+    gui = ti.GUI('BPR', (bpr.w, bpr.w))
+    while gui.running:
+        for e in gui.get_events(gui.PRESS):
+            if e.key == gui.ESCAPE:
+                gui.running = False
+            elif e.key == 'a':
+                emitter_pos[0] -= 0.05
+            elif e.key == 'd':
+                emitter_pos[0] += 0.05
+            elif e.key == gui.DOWN:
+                emitter_pos[1] -= 0.05
+            elif e.key == gui.UP:
+                emitter_pos[1] += 0.05
+            elif e.key == 'd':
+                emitter_pos[0] += 0.05
+            elif e.key == 's':
+                emitter_pos[2] -= 0.05
+            elif e.key == 'w':
+                emitter_pos[2] += 0.05
+        bpr.render(emitter_pos)
+        gui.set_image(bpr.pixels)
+        gui.show()
+        gui.clear()
+        bpr.reset()
+    # if profiling:
+    #     ti.profiler.print_kernel_profiler_info() 
+    # ti.tools.imwrite(bpr.pixels.to_numpy(), "./blinn-phong.png")
 
-    depth_map = bpr.depth_map.to_numpy()
-    depth_map /= depth_map.max()
-    ti.tools.imwrite(depth_map, "./depth.png")
+    # depth_map = bpr.depth_map.to_numpy()
+    # depth_map /= depth_map.max()
+    # ti.tools.imwrite(depth_map, "./depth.png")
