@@ -8,16 +8,15 @@
 		<float name="near_clip" value="0.001"/>
 		<float name="far_clip" value="2000"/>
 		<float name="fov" value="39.3077"/>
-        <integer name="sample_count" value="512"/>
+        <integer name="sample_count" value="128"/>
 
 		<transform name="toWorld">
 			<lookat target="2.78, 2.73, -7.99" origin="2.78, 2.73, -8.00" up="0, 1, 0"/>
 		</transform>
 
 		<film type="film">
-			<integer name="width" value="512"/>
-			<integer name="height" value="512"/>
-			<integer name="subSamples" value="8"/>
+			<integer name="img_size" value="512"/>
+			<integer name="sub_samples" value="8"/>
 		</film>
 	</sensor>
 
@@ -37,6 +36,11 @@
 		<float name="shininess" value="1.0"/>
 	</bsdf>
 
+	<bsdf type="blinn-phong" id="back">
+		<!-- <srgb name="reflectance" value="#DD2525"/> -->
+		<float name="shininess" value="2.5"/>
+	</bsdf>
+
 	<bsdf type="blinn-phong" id="left_wall">
 		<!-- <srgb name="reflectance" value="#25DD25"/> -->
 		<float name="shininess" value="3.0"/>
@@ -47,38 +51,17 @@
 		<float name="shininess" value="4.0"/>
 	</bsdf>
 
-	<shape type="obj">
-		<string name="filename" value="meshes/cbox_luminaire.obj"/>
-		<!-- Rigid-body transformation defined in world frame -->
-		<!-- Angle are of unit 'degree', not 'rads' -->
-		<transform name="toWorld">
-			<translate x="0" y="-0.002" z="0"/>
-			<!-- Three types of rotation are supported -->
-			<!-- <rotate type="quaternion" x="0" y="0" z="0" w="0"/> -->
-
-			<!-- For simple rotation, angle-axis / euler are recommended -->
-			<!-- <rotate type="angle-axis" x="0" y="0" z="0" angle="0"/> -->
-
-			<!--Roll Pitch Yaw Description, note that mitsuba coordinates ar
-				x - lateral translation, y: height, z: depth, therefore 
-				roll spins around z, pitch spins around x, yaw spins around y
-			-->
-			<!-- <rotate type="euler" r="0" p="0" y="0"/> -->
-		</transform>
-		<ref id="white"/>
-		<!-- <emitter type="area">
-			<srgb name="reflectance" value="#FFFFFF"/>
-		</emitter> -->
-	</shape>
-
 	<emitter type="point">
 		<rgb name="reflectance" value="#FDFAFB"/>
-		<point name="position" x="2.79" y="2.73" z="-8.01"/>
+		<point name="position" x="2.79" y="4.73" z="2.51"/>
 	</emitter>
 
 	<shape type="obj">
 		<string name="filename" value="meshes/cbox_floor.obj"/>
 		<ref id="floor"/>
+		<transform name="toWorld">
+			<translate x="0" y="0.0" z="0"/>
+		</transform>
 	</shape>
 
 	<shape type="obj">
@@ -89,7 +72,7 @@
 
 	<shape type="obj">
 		<string name="filename" value="meshes/cbox_back.obj"/>
-		<ref id="floor"/>
+		<ref id="back"/>
 	</shape>
 
 	<shape type="obj">

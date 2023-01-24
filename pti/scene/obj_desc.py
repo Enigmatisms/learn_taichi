@@ -26,6 +26,7 @@ class ObjDescriptor:
         self.R = R
         self.t = t
         self.aabb = get_aabb(meshes)        # of shape (2, 3)
+        self.bsdf = bsdf
 
     def __repr__(self):
         centroid = (self.aabb[0] + self.aabb[1]) / 2

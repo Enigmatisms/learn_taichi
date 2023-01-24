@@ -13,10 +13,11 @@ import numpy as np
 import xml.etree.ElementTree as xet
 
 from typing import List
-from obj_loader import *
 from numpy import ndarray as Arr
 
 from bsdf.bsdfs import BlinnPhong
+
+from scene.obj_loader import *
 from scene.obj_desc import ObjDescriptor
 from scene.general_parser import get, transform_parse
 
@@ -108,7 +109,7 @@ def parse_global_sensor(sensor_elem: xet.Element):
 
     sensor_config["transform"]  = transform_parse(sensor_elem.find("transform"))
     film_elems                  = sensor_elem.find("film").findall("integer")
-    assert(len(film_elems) >= 3)        # at least width, height and sample count (meaningless for rasterizer)
+    assert(len(film_elems) >= 2)        # at least width, height and sample count (meaningless for rasterizer)
     sensor_config["film"]       = np.int32([get(int_elem, "value", int) for int_elem in film_elems])
     return sensor_config
 

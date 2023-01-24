@@ -11,8 +11,9 @@ from scipy.spatial.transform import Rotation as Rot
 
 __all__ = ['fov2focal', 'rotation_between']
 
-def fov2focal(fov: ti.Vector, img_size):
-    return img_size / np.tan(.5 * fov)
+def fov2focal(fov: float, img_size):
+    fov = fov / 180. * np.pi
+    return 0.5 * img_size / np.tan(.5 * fov)
     
 def rotation_between(fixed: Arr, target: Arr) -> Arr:
     """

@@ -20,7 +20,6 @@ class PointSource(LightSource):
         super().__init__(elem, "point")
         if elem is not None:
             pos_elem = elem.find("point")
-            print(pos_elem, elem.tag)
             assert(pos_elem is not None)
             self.pos: np.ndarray = vec3d_parse(pos_elem)
         else:
