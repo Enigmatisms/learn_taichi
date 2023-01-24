@@ -47,7 +47,6 @@ class BlinnPhongRasterizer:
         self.cam_t      = ti.Vector(prop['transform'][1])
         self.cam_r      = ti.Matrix(rotation_between(np.float32([0, 0, 1]), self.cam_orient))
         
-        # TODO: attach shininess to every object (BSDF)
         self.aabbs      = ti.Vector.field(3, ti.f32, (self.num_objects, 2))
         self.normals    = ti.Vector.field(3, ti.f32)
         self.meshes     = ti.Vector.field(3, dtype = ti.f32)               # leveraging SSDS, shape (N, mesh_num, 3) - vector3d
@@ -58,7 +57,6 @@ class BlinnPhongRasterizer:
         self.mesh_cnt   = ti.field(ti.i32, self.num_objects)
         self.depth_map  = ti.field(ti.f32, (self.w, self.w))                # gray-scale
         """
-            - [] Back-culling should be checked. 
             - [] AABB check to be implemented
             Iterate through all pixels for a rasterizer
         """
@@ -92,59 +90,116 @@ class BlinnPhongRasterizer:
         cam_dir = _Vec3([(pi - self.half_w) * self.inv_focal, (pj - self.half_w) * self.inv_focal, 1.])
         return (self.cam_r @ cam_dir).normalized()
 
+    @ti.func
+    def ray_intersect(self, ray, start_p, min_depth = -1.0):
+        obj_id = -1
+        tri_id = -1
+        if min_depth > 0.0:
+            start_p += ray * 1e-3
+            min_depth -= 2e-3
+        else:
+            min_depth = 1e7
+        for aabb_idx in range(self.num_objects):
+            if self.aabb_test(aabb_idx, ray, start_p) == False: continue
+            tri_num = self.mesh_cnt[aabb_idx]
+            for mesh_idx in range(tri_num):
+                normal = self.normals[aabb_idx, mesh_idx]
+                if tm.dot(ray, normal) >= 0.0: continue     # back-face culling
+                # Sadly, Taichi does not support slicing. I think this restrict the use cases of Matrix field
+                p1 = self.meshes[aabb_idx, mesh_idx, 0]
+                vec1 = self.meshes[aabb_idx, mesh_idx, 1] - p1
+                vec2 = self.meshes[aabb_idx, mesh_idx, 2] - p1
+                mat = ti.Matrix.cols([vec1, vec2, -ray]).inverse()
+                u, v, t = mat @ (start_p - p1)
+                if u >= 0 and v >= 0 and u + v <= 1.0:
+                    if t > 0 and t < min_depth:
+                        min_depth = t
+                        obj_id = aabb_idx
+                        tri_id = mesh_idx
+        return (obj_id, tri_id, min_depth)
+
+    @ti.func
+    def does_intersect(self, ray, start_p, depth = -1.0) -> bool:
+        """
+            Faster (greedy) checking for intersection, returns True if intersect anything within depth \\
+            If depth is None (not specified), then depth range will be a large float (1e7) \\
+            Taichi does not support compile-time branching. Actually it does, but not flexible, for e.g \\
+            C++ supports compile-time branching via template parameter, but Taichi can not "pass" compile-time constants
+        """
+        if depth > 0.0:
+            start_p += ray * 1e-3
+            depth -= 2e-3
+        else:
+            depth = 1e7
+        flag = False
+        for aabb_idx in range(self.num_objects):
+            if self.aabb_test(aabb_idx, ray, start_p) == False: continue
+            tri_num = self.mesh_cnt[aabb_idx]
+            for mesh_idx in range(tri_num):
+                normal = self.normals[aabb_idx, mesh_idx]
+                if tm.dot(ray, normal) >= 0.0: continue     # back-face culling
+                p1 = self.meshes[aabb_idx, mesh_idx, 0]
+                vec1 = self.meshes[aabb_idx, mesh_idx, 1] - p1
+                vec2 = self.meshes[aabb_idx, mesh_idx, 2] - p1
+                mat = ti.Matrix.cols([vec1, vec2, -ray]).inverse()
+                u, v, t = mat @ (start_p - p1)
+                if u >= 0 and v >= 0 and u + v <= 1.0:
+                    if t > 0 and t < depth:
+                        flag = True
+                        break
+            if flag == True: break
+        return flag
+
+    @ti.func
+    def distance_attenuate(self, x):
+        return ti.min(1.0 / (1e-5 + x ** 2), 1e5)
+
     @ti.kernel
     def render(self):
         for i, j in self.pixels:
             ray = self.pix2ray(i, j)
-            # Three steps: (1) AABB test (2) Back-face culling (3) bary-centric depth compute
-            obj_id = -1
-            tri_id = -1
-            min_depth = 1e6
-            for aabb_idx in range(self.num_objects):
-                if self.aabb_test(aabb_idx, ray) == False: continue
-                tri_num = self.mesh_cnt[aabb_idx]
-                for mesh_idx in range(tri_num):
-                    normal = self.normals[aabb_idx, mesh_idx]
-                    if tm.dot(ray, normal) >= 0.0: continue     # back-face culling
-                    # Sadly, Taichi does not support slicing. I think this restrict the use cases of Matrix field
-                    p1 = self.meshes[aabb_idx, mesh_idx, 0]
-                    vec1 = self.meshes[aabb_idx, mesh_idx, 1] - p1
-                    vec2 = self.meshes[aabb_idx, mesh_idx, 2] - p1
-                    mat = ti.Matrix.cols([vec1, vec2, -ray]).inverse()
-                    u, v, t = mat @ (self.cam_t - p1)
-                    if u >= 0 and v >= 0 and u + v <= 1.0:
-                        if t > 0 and t < min_depth:
-                            min_depth = t
-                            obj_id = aabb_idx
-                            tri_id = mesh_idx
+            obj_id, tri_id, min_depth = self.ray_intersect(ray, self.cam_t)
             # Iterate through all the meshes and find the minimum depth
-            if obj_id < 0:
-                self.depth_map[i, j] = 0.0
-                self.pixels[i, j].fill(0)
-            else:
+            if obj_id >= 0:
                 self.depth_map[i, j] = min_depth
                 # Calculate Blinn-Phong lighting model
                 normal = self.normals[obj_id, tri_id]
-                hit_point = ray * min_depth + self.cam_t
-                light_dir = (self.emit_pos - hit_point).normalized()
+                hit_point  = ray * min_depth + self.cam_t
+                to_emitter = self.emit_pos - hit_point
+                emitter_d  = to_emitter.norm()
+                light_dir  = to_emitter / emitter_d
                 # light_dir and ray are normalized, ray points from cam to hit point
                 # the ray direction vector in half way vector should point from hit point to cam
                 half_way = (0.5 * (light_dir - ray)).normalized()
                 spec = tm.pow(ti.max(tm.dot(half_way, normal), 0.0), self.shininess[obj_id])
+                spec *= self.distance_attenuate(emitter_d)
+                if self.does_intersect(light_dir, hit_point, emitter_d):
+                    spec *= 0.1
                 self.pixels[i, j] = spec * self.emit_int
     
     @ti.func
-    def aabb_test(self, aabb_idx, ray: _Vec3):
+    def aabb_test(self, aabb_idx, ray: _Vec3, ray_o: _Vec3):
         """
-            We can skip AABB test at first
+            AABB used to skip some of the objects
         """
-        return True
+        t_min = (self.aabbs[aabb_idx, 0] - ray_o) / ray
+        t_max = (self.aabbs[aabb_idx, 1] - ray_o) / ray
+        t1 = ti.min(t_min, t_max)
+        t2 = ti.max(t_min, t_max)
+        t_near  = ti.max(ti.max(t1.x, t1.y), t1.z)
+        t_far   = ti.min(ti.min(t2.x, t2.y), t2.z)
+        return t_near < t_far
 
 if __name__ == "__main__":
-    ti.init()
+    profiling = True
+    ti.init(kernel_profiler = profiling)
     emitter_configs, _, meshes, configs = mitsuba_parsing("../scene/test/", "test.xml")
     bpr = BlinnPhongRasterizer(emitter_configs[0], meshes, configs)
+    # Note that direct test the rendering time (once) is meaningless, executing for the first time
+    # will be accompanied by JIT compiling, compilation time will be included.
     bpr.render()
+    if profiling:
+        ti.profiler.print_kernel_profiler_info() 
     ti.tools.imwrite(bpr.pixels.to_numpy(), "./blinn-phong.png")
 
     depth_map = bpr.depth_map.to_numpy()

@@ -13,6 +13,11 @@ def get_aabb(meshes: Arr) -> Arr:
     """
     mini = meshes.min(axis = 1).min(axis = 0)
     maxi = meshes.max(axis = 1).max(axis = 0)
+    large_diff = np.abs(maxi - mini) > 1e-3
+    for i in range(3):
+        if not large_diff[i]:       # special processing for co-plane point AABB
+            mini[i] -= 1e-2
+            maxi[i] += 1e-2
     return np.float32((mini, maxi))
 
 class ObjDescriptor:

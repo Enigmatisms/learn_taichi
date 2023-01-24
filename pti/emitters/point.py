@@ -24,6 +24,11 @@ class PointSource(LightSource):
             self.pos: np.ndarray = vec3d_parse(pos_elem)
         else:
             self.pos = np.zeros(3, np.float32)
+        all_felems = elem.findall("float")
+        self.half_w = 4.0
+        for float_elem in all_felems:
+            if float_elem.get("name") == "half_decay":
+                self.half_w = float(float_elem.get("value"))
 
     def sample(self):
         raise NotImplementedError("To be implemented.")

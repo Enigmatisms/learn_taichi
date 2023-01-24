@@ -52,7 +52,8 @@
 	</bsdf>
 
 	<emitter type="point">
-		<rgb name="reflectance" value="#FDFAFB"/>
+		<rgb name="reflectance" value="5.0"/>
+		<float name="half_decay" value="1.0"/>
 		<point name="position" x="2.79" y="4.73" z="2.51"/>
 	</emitter>
 
