@@ -38,10 +38,6 @@ def parse_emitters(em_elem: list):
     """
         Parsing scene emitters from list of xml nodes \\
         only [Point], [Area], [Directional] are supported
-        - for example, point light source is the simplest of call
-        - rasterizer should have two functionalities: 
-            - point source direct illumination (Phong model)
-            - depth map rasterization
     """
     sources = []
     for elem in em_elem:
@@ -79,7 +75,7 @@ def parse_bsdf(bsdf_list: List[xet.Element]):
     """
         Parsing wavefront obj file (filename) from list of xml nodes    
         note that participating medium is complex, therefore will not be added in the early stage
-        FIXME: bsdf is of the lowest priority, only after rasterizer is completed can this gets implemented
+        FIXME: bsdf is of the lowest priority, only after tracer is completed can this gets implemented
         return: dict
     """
     results = dict()
@@ -109,7 +105,7 @@ def parse_global_sensor(sensor_elem: xet.Element):
 
     sensor_config["transform"]  = transform_parse(sensor_elem.find("transform"))
     film_elems                  = sensor_elem.find("film").findall("integer")
-    assert(len(film_elems) >= 2)        # at least width, height and sample count (meaningless for rasterizer)
+    assert(len(film_elems) >= 2)        # at least width, height and sample count (meaningless for direct component tracer)
     sensor_config["film"]       = np.int32([get(int_elem, "value", int) for int_elem in film_elems])
     return sensor_config
 

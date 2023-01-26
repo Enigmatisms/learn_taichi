@@ -27,7 +27,7 @@ https://user-images.githubusercontent.com/46109954/212971520-f7a906ea-6fe7-4cf1-
 ### Taichi Learning Phase 2
 - Implement a simple path tracer. The most important part is to fully understand Monte-Carlo integral used in path tracer. The files are included in `pti/`
   - [x] XML scene description parser
-  - [x] Depth / direct lighting component rasterizer
+  - [x] Depth / direct lighting component ray tracer
   - [ ] BSDF only path tracer
   - [ ] Participating media
   

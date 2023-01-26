@@ -22,7 +22,7 @@
 
 	<bsdf type="blinn-phong" id="box">
 		<!-- <srgb name="reflectance" value="#BCBCBC"/> -->
-		<!-- For simple rasterizer, shininess define the glossiness, 1.0 being the smallest value -->
+		<!-- For simple tracer, shininess define the glossiness, 1.0 being the smallest value -->
 		<float name="shininess" value="6.0"/>
 	</bsdf>
 

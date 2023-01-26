@@ -1,5 +1,5 @@
 """
-    Rasterizer for direct lighting given a point source
+    Tracer for direct lighting given a point source
     Blinn-Phong model
     @author: Qianyue He
     @date: 2023.1.22
@@ -23,9 +23,9 @@ from scene.xml_parser import mitsuba_parsing
 _Vec3 = ttype.vector(3, ti.f32)
 
 @ti.data_oriented
-class BlinnPhongRasterizer:
+class BlinnPhongTracer:
     """
-        Rasterizer using Bary-centric coordinates
+        Ray tracing using Bary-centric coordinates
         origin + direction * t = u * PA(vec) + v * PB(vec) + P
         This is a rank-3 matrix linear equation
     """
@@ -62,7 +62,7 @@ class BlinnPhongRasterizer:
         """
             For debug purpose
         """
-        return f"BPR: number of object {self.num_objects}, width: {self.w}, sample count: {self.sample_cnt}. Focal: {self.focal}"
+        return f"bpt: number of object {self.num_objects}, width: {self.w}, sample count: {self.sample_cnt}. Focal: {self.focal}"
 
     def initialze(self, objects: List[ObjDescriptor]):
         for i, obj in enumerate(objects):
@@ -87,6 +87,9 @@ class BlinnPhongRasterizer:
 
     @ti.func
     def ray_intersect(self, ray, start_p, min_depth = -1.0):
+        """
+            Intersection function and mesh organization can be reused
+        """
         obj_id = -1
         tri_id = -1
         if min_depth > 0.0:
@@ -199,10 +202,10 @@ if __name__ == "__main__":
     emitter_configs, _, meshes, configs = mitsuba_parsing("../scene/test/", "test.xml")
     emitter = emitter_configs[0]
     emitter_pos = _Vec3(emitter.pos)
-    bpr = BlinnPhongRasterizer(emitter, meshes, configs)
+    bpt = BlinnPhongTracer(emitter, meshes, configs)
     # Note that direct test the rendering time (once) is meaningless, executing for the first time
     # will be accompanied by JIT compiling, compilation time will be included.
-    gui = ti.GUI('BPR', (bpr.w, bpr.w))
+    gui = ti.GUI('BPT', (bpt.w, bpt.w))
     while gui.running:
         for e in gui.get_events(gui.PRESS):
             if e.key == gui.ESCAPE:
@@ -221,15 +224,15 @@ if __name__ == "__main__":
                 emitter_pos[2] -= 0.05
             elif e.key == 'w':
                 emitter_pos[2] += 0.05
-        bpr.render(emitter_pos)
-        gui.set_image(bpr.pixels)
+        bpt.render(emitter_pos)
+        gui.set_image(bpt.pixels)
         gui.show()
         gui.clear()
-        bpr.reset()
+        bpt.reset()
     # if profiling:
     #     ti.profiler.print_kernel_profiler_info() 
-    # ti.tools.imwrite(bpr.pixels.to_numpy(), "./blinn-phong.png")
+    # ti.tools.imwrite(bpt.pixels.to_numpy(), "./blinn-phong.png")
 
-    # depth_map = bpr.depth_map.to_numpy()
+    # depth_map = bpt.depth_map.to_numpy()
     # depth_map /= depth_map.max()
     # ti.tools.imwrite(depth_map, "./depth.png")

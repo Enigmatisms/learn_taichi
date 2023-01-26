@@ -15,7 +15,7 @@ class BSDF:
         @date: 2023-1-23
 
         TODO: other reflectance models to be implemented
-        for rasterizer, BSDF base class is enough
+        for tracers, BSDF base class is enough
     """
     def __init__(self, rflct: np.ndarray, _type: str):
         self.type: str = _type
@@ -26,7 +26,7 @@ class BSDF:
 
 class BlinnPhong(BSDF):
     """
-        "BSDF" used in Blinn-Phong rasterizer, not an actual bsdf
+        "BSDF" used in Blinn-Phong tracer, not an actual bsdf
         This class is extremely simple
         @author: Qianyue He
         @date: 2023-1-23
@@ -37,4 +37,4 @@ class BlinnPhong(BSDF):
         self.shininess = shininess
 
     def __repr__(self) -> str:
-        return f"<Blinn-Phong shininess class for rasterizer. Shininess = {self.shininess:.4f}>"
+        return f"<Blinn-Phong shininess class for Blinn-Phong tracer. Shininess = {self.shininess:.4f}>"
