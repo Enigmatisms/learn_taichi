@@ -22,15 +22,25 @@ def parse_str(val_str: str) -> Arr:
     else:       # single scalar marked as RGB
         return np.float32([float(val_str.strip())] * 3)
 
-def rgb_parse(val_str: str):
-    if val_str.startswith("#"): # html-like hexidecimal RGB
-        rgb = np.zeros(3, dtype = np.float32)
-        for i in range(3):
-            base = 1 + (i << 1)
-            rgb[i] = int(val_str[base:base + 2], 16) / 255.
-        return rgb
+def rgb_parse(elem: xet.Element):
+    if elem is None:
+        raise ValueError("EmptyElementError: Element <RGB> is None.")
     else:
-        return parse_str(val_str)
+        val_str = elem.get("value")
+        if val_str is None:
+            if elem.get("r"):
+                return np.float32([get(elem, "r"), get(elem, "g"), get(elem, "b")])
+            else:
+                raise ValueError("RGBError: RGB element does not contain valid field.")
+        else:
+            if val_str.startswith("#"): # html-like hexidecimal RGB
+                rgb = np.zeros(3, dtype = np.float32)
+                for i in range(3):
+                    base = 1 + (i << 1)
+                    rgb[i] = int(val_str[base:base + 2], 16) / 255.
+                return rgb
+            else:
+                return parse_str(val_str)
 
 def vec3d_parse(elem: xet.Element):
     if elem.tag == "point" and elem.get("name") in ("position", "direction"):

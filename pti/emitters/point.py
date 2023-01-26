@@ -9,21 +9,20 @@ import sys
 sys.path.append("..")
 
 import numpy as np
+from taichi.math import vec3
 import xml.etree.ElementTree as xet
 
-from emitters.abtract_source import LightSource
+from emitters.abtract_source import LightSource, TaichiSource
 from scene.general_parser import vec3d_parse
 
 
 class PointSource(LightSource):
     def __init__(self, elem: xet.Element = None):
         super().__init__(elem, "point")
-        if elem is not None:
-            pos_elem = elem.find("point")
-            assert(pos_elem is not None)
-            self.pos: np.ndarray = vec3d_parse(pos_elem)
-        else:
-            self.pos = np.zeros(3, np.float32)
+        pos_elem = elem.find("point")
+        assert(pos_elem is not None)
+        self.pos: np.ndarray = vec3d_parse(pos_elem)
 
-    def sample(self):
-        raise NotImplementedError("To be implemented.")
+
+    def export(self) -> TaichiSource:
+        return TaichiSource(_type = 0, intensity = self.intensity, pos = vec3(self.pos))

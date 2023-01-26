@@ -19,14 +19,14 @@ from bsdf.bsdfs import BlinnPhong
 
 from scene.obj_loader import *
 from scene.obj_desc import ObjDescriptor
-from scene.general_parser import get, transform_parse
+from scene.general_parser import get, transform_parse, rgb_parse
 
 # import emitters
 from emitters.point import PointSource
 from emitters.rect_area import RectAreaSource
 from emitters.directional import DirectionalSource
 
-__MAPPING__ = {"integer": int, "float": float, "string": str}
+__MAPPING__ = {"integer": int, "float": float, "string": str, "boolean": lambda x: True if x.lower() == "true" else False}
 
 """
     Actually I think in Taichi, we can leverage SSDS:
@@ -84,7 +84,12 @@ def parse_bsdf(bsdf_list: List[xet.Element]):
         bsdf_id = bsdf_node.get("id")
         # FIXME: to be implemented
         if bsdf_type == "blinn-phong":
-            bsdf = BlinnPhong(get(bsdf_node.find("float"), "value"))
+            rgb_node = bsdf_node.find("rgb")
+            if rgb_node is not None:
+                reflectance = rgb_parse(rgb_node)
+            else:
+                reflectance = np.ones(3, np.float32)
+            bsdf = BlinnPhong(reflectance, get(bsdf_node.find("float"), "value"))
         else:
             raise NotImplementedError(f"Work for BSDF type of {bsdf_type} is on the way")
         if bsdf_id in results:
@@ -106,7 +111,11 @@ def parse_global_sensor(sensor_elem: xet.Element):
     sensor_config["transform"]  = transform_parse(sensor_elem.find("transform"))
     film_elems                  = sensor_elem.find("film").findall("integer")
     assert(len(film_elems) >= 2)        # at least width, height and sample count (meaningless for direct component tracer)
-    sensor_config["film"]       = np.int32([get(int_elem, "value", int) for int_elem in film_elems])
+    sensor_config["film"]       = {}
+    for elem in film_elems:
+        if elem.tag in __MAPPING__:
+            name = elem.get("name")
+            sensor_config["film"][name] = get(elem, "value", __MAPPING__[elem.tag])
     return sensor_config
 
 def mitsuba_parsing(directory: str, file: str):

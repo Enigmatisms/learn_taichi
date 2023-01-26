@@ -2,64 +2,61 @@
 <!-- A test file for mitsuba-like scene xml file parser -->
 <!-- Author: Qianyue He / Original credit goes to Wenzel Jakob -->
 <!-- Only Steady state rendering are supported -->
-<!-- Only RGB or sRGB spectrums are supported -->
+<!-- Only RGB or rgb spectrums are supported -->
 <scene version="1.0">
 	<sensor type="perspective">
 		<float name="near_clip" value="0.001"/>
 		<float name="far_clip" value="2000"/>
 		<float name="fov" value="39.3077"/>
         <integer name="sample_count" value="128"/>
+        <integer name="max_bounce" value="16"/>
+        <boolean name="use_rr" value="false"/>			<!-- Whether to use Russian roulette ray termination -->
 
 		<transform name="toWorld">
 			<lookat target="2.78, 2.73, -7.99" origin="2.78, 2.73, -8.00" up="0, 1, 0"/>
 		</transform>
 
 		<film type="film">
-			<integer name="img_size" value="512"/>
+			<integer name="width" value="512"/>
+			<integer name="height" value="512"/>
 			<integer name="sub_samples" value="8"/>
 		</film>
 	</sensor>
 
 	<bsdf type="blinn-phong" id="box">
-		<!-- <srgb name="reflectance" value="#BCBCBC"/> -->
-		<!-- For simple tracer, shininess define the glossiness, 1.0 being the smallest value -->
-		<float name="shininess" value="6.0"/>
+		<rgb name="reflectance" value="#BCBCBC"/>
+		<float name="shininess" value="5.0"/>
 	</bsdf>
 
-	<bsdf type="blinn-phong" id="white">
-		<!-- <srgb name="reflectance" value="#BDBDBD"/> -->
-		<float name="shininess" value="2.0"/>
-	</bsdf>
-
-	<bsdf type="blinn-phong" id="floor">
-		<!-- <srgb name="reflectance" value="#DD2525"/> -->
+	<bsdf type="blinn-phong" id="large_box">
+		<rgb name="reflectance" value="#BCBCBC"/>
 		<float name="shininess" value="1.0"/>
 	</bsdf>
 
-	<bsdf type="blinn-phong" id="back">
-		<!-- <srgb name="reflectance" value="#DD2525"/> -->
-		<float name="shininess" value="2.5"/>
+	<bsdf type="blinn-phong" id="white">
+		<rgb name="reflectance" value="#FFFFFF"/>
+		<float name="shininess" value="1.0"/>
 	</bsdf>
 
 	<bsdf type="blinn-phong" id="left_wall">
-		<!-- <srgb name="reflectance" value="#25DD25"/> -->
+		<rgb name="reflectance" value="#25DD25"/>
 		<float name="shininess" value="3.0"/>
 	</bsdf>
 
 	<bsdf type="blinn-phong" id="right_wall">
-		<!-- <srgb name="reflectance" value="#FFFFFF"/> -->
+		<rgb name="reflectance" value="#DD2525"/>
 		<float name="shininess" value="4.0"/>
 	</bsdf>
 
 	<emitter type="point">
-		<rgb name="reflectance" value="5.0"/>
+		<rgb name="reflectance" value="6.0, 5.0, 4.0"/>
 		<float name="half_decay" value="1.0"/>
 		<point name="position" x="2.79" y="4.73" z="2.51"/>
 	</emitter>
 
 	<shape type="obj">
 		<string name="filename" value="meshes/cbox_floor.obj"/>
-		<ref id="floor"/>
+		<ref id="white"/>
 		<transform name="toWorld">
 			<translate x="0" y="0.0" z="0"/>
 		</transform>
@@ -67,18 +64,16 @@
 
 	<shape type="obj">
 		<string name="filename" value="meshes/cbox_ceiling.obj"/>
-
 		<ref id="white"/>
 	</shape>
 
 	<shape type="obj">
 		<string name="filename" value="meshes/cbox_back.obj"/>
-		<ref id="back"/>
+		<ref id="white"/>
 	</shape>
 
 	<shape type="obj">
 		<string name="filename" value="meshes/cbox_greenwall.obj"/>
-
 		<ref id="right_wall"/>
 	</shape>
 
@@ -90,13 +85,11 @@
 
 	<shape type="obj">
 		<string name="filename" value="meshes/cbox_smallbox.obj"/>
-
-		<ref id="white"/>
+		<ref id="box"/>
 	</shape>
 
 	<shape type="obj">
 		<string name="filename" value="meshes/cbox_largebox.obj"/>
-
-		<ref id="box"/>
+		<ref id="large_box"/>
 	</shape>
 </scene>

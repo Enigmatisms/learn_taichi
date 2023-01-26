@@ -1,8 +1,8 @@
 """
-    Tracer for direct lighting given a point source
-    Blinn-Phong model
+    Path tracer for indirect / global illumination
+    This module will be progressively built. Currently, participating media is not supported
     @author: Qianyue He
-    @date: 2023.1.22
+    @date: 2023.1.26
 """
 
 import sys
@@ -11,31 +11,33 @@ sys.path.append("..")
 import numpy as np
 import taichi as ti
 import taichi.math as tm
+from taichi.math import vec3
 
 from typing import List
 from la.cam_transform import *
-from taichi import types as ttype
 from emitters.point import PointSource
+from emitters.rect_area import RectAreaSource
 
 from scene.obj_desc import ObjDescriptor
 from scene.xml_parser import mitsuba_parsing
 
-_Vec3 = ttype.vector(3, ti.f32)
-
 @ti.data_oriented
-class BlinnPhongTracer:
+class PathTracer:
     """
-        Ray tracing using Bary-centric coordinates
-        origin + direction * t = u * PA(vec) + v * PB(vec) + P
-        This is a rank-3 matrix linear equation
+        Simple Ray tracing using Bary-centric coordinates
+        This tracer can yield result with global illumination effect
     """
     def __init__(self, emitter: PointSource, objects: List[ObjDescriptor], prop: dict):
-        # This should be extended
-        self.w          = prop['film'][0]                              # image is a standard square
+        self.w          = prop['film']['width']                              # image is a standard square
+        self.h          = prop['film']['height']
         self.sample_cnt = prop['sample_count']
-        self.focal      = fov2focal(prop['fov'], self.w)
+        self.max_bounce = prop['max_bounce']
+        self.use_rr     = prop['use_rr']
+
+        self.focal      = fov2focal(prop['fov'], min(self.w, self.h))
         self.inv_focal  = 1. / self.focal
         self.half_w     = self.w / 2
+        self.half_h     = self.h / 2
 
         self.num_objects = len(objects)
         max_tri_num = max([obj.tri_num for obj in objects])
@@ -49,20 +51,23 @@ class BlinnPhongTracer:
         self.aabbs      = ti.Vector.field(3, ti.f32, (self.num_objects, 2))
         self.normals    = ti.Vector.field(3, ti.f32)
         self.meshes     = ti.Vector.field(3, dtype = ti.f32)               # leveraging SSDS, shape (N, mesh_num, 3) - vector3d
+        self.surf_color = ti.Vector.field(3, ti.f32, self.num_objects)
+        self.pixels = ti.Vector.field(3, ti.f32, (self.w, self.h))         # output: color
+
+        self.pdf_sum    = ti.field(ti.f32, (self.w, self.h))               # progressive update
         self.mesh_nodes = ti.root.dense(ti.i, self.num_objects)
         self.mesh_nodes.bitmasked(ti.j, max_tri_num).dense(ti.k, 3).place(self.meshes)      # for simple shapes, this would be efficient
         self.mesh_nodes.bitmasked(ti.j, max_tri_num).place(self.normals)
-        self.shininess  = ti.field(ti.f32, self.num_objects)
         self.mesh_cnt   = ti.field(ti.i32, self.num_objects)
-        self.depth_map  = ti.field(ti.f32, (self.w, self.w))                # gray-scale
-        self.pixels = ti.Vector.field(3, ti.f32, (self.w, self.w))
+        self.shininess  = ti.field(ti.f32, self.num_objects)
+
         self.initialze(objects)
 
     def __repr__(self):
         """
             For debug purpose
         """
-        return f"bpt: number of object {self.num_objects}, width: {self.w}, sample count: {self.sample_cnt}. Focal: {self.focal}"
+        return f"bpt: number of object {self.num_objects}, w, h: ({self.w}, {self.h}), sample count: {self.sample_cnt}. Focal: {self.focal}"
 
     def initialze(self, objects: List[ObjDescriptor]):
         for i, obj in enumerate(objects):
@@ -74,6 +79,7 @@ class BlinnPhongTracer:
             self.shininess[i]   = obj.bsdf.shininess
             self.aabbs[i, 0]    = ti.Matrix(obj.aabb[0])       # unrolled
             self.aabbs[i, 1]    = ti.Matrix(obj.aabb[1])
+            self.surf_color[i]  = ti.Vector(obj.bsdf.reflectance)
 
     @ti.func
     def pix2ray(self, i, j):
@@ -82,7 +88,7 @@ class BlinnPhongTracer:
         """
         pi = float(i)
         pj = float(j)
-        cam_dir = _Vec3([(pi - self.half_w) * self.inv_focal, (pj - self.half_w) * self.inv_focal, 1.])
+        cam_dir = vec3([(pi - self.half_w + 0.5) * self.inv_focal, (pj - self.half_h + 0.5) * self.inv_focal, 1.])
         return (self.cam_r @ cam_dir).normalized()
 
     @ti.func
@@ -148,35 +154,16 @@ class BlinnPhongTracer:
             if flag == True: break
         return flag
 
-    @ti.func
-    def distance_attenuate(self, x):
-        return ti.min(1.0 / (1e-5 + x ** 2), 1e5)
-
     @ti.kernel
-    def render(self, emit_pos: _Vec3):
+    def render(self, emit_pos: vec3):
         for i, j in self.pixels:
             ray = self.pix2ray(i, j)
             obj_id, tri_id, min_depth = self.ray_intersect(ray, self.cam_t)
-            # Iterate through all the meshes and find the minimum depth
-            if obj_id >= 0:
-                self.depth_map[i, j] = min_depth
-                # Calculate Blinn-Phong lighting model
-                normal = self.normals[obj_id, tri_id]
-                hit_point  = ray * min_depth + self.cam_t
-                to_emitter = emit_pos - hit_point
-                emitter_d  = to_emitter.norm()
-                light_dir  = to_emitter / emitter_d
-                # light_dir and ray are normalized, ray points from cam to hit point
-                # the ray direction vector in half way vector should point from hit point to cam
-                half_way = (0.5 * (light_dir - ray)).normalized()
-                spec = tm.pow(ti.max(tm.dot(half_way, normal), 0.0), self.shininess[obj_id])
-                spec *= self.distance_attenuate(emitter_d)
-                if self.does_intersect(light_dir, hit_point, emitter_d):
-                    spec *= 0.1
-                self.pixels[i, j] = spec * self.emit_int
-            else:
-                self.depth_map[i, j] = 0.0
-                self.pixels[i, j].fill(0.0)
+            for bounce in range(self.max_bounce):
+                """
+                    To be implemented
+                """
+                pass
 
     @ti.kernel
     def reset(self):
@@ -184,7 +171,7 @@ class BlinnPhongTracer:
             self.pixels[i, j].fill(0.0)
     
     @ti.func
-    def aabb_test(self, aabb_idx, ray: _Vec3, ray_o: _Vec3):
+    def aabb_test(self, aabb_idx, ray: vec3, ray_o: vec3):
         """
             AABB used to skip some of the objects
         """
@@ -201,11 +188,11 @@ if __name__ == "__main__":
     ti.init(kernel_profiler = profiling)
     emitter_configs, _, meshes, configs = mitsuba_parsing("../scene/test/", "test.xml")
     emitter = emitter_configs[0]
-    emitter_pos = _Vec3(emitter.pos)
-    bpt = BlinnPhongTracer(emitter, meshes, configs)
+    emitter_pos = vec3(emitter.pos)
+    bpt = PathTracer(emitter, meshes, configs)
     # Note that direct test the rendering time (once) is meaningless, executing for the first time
     # will be accompanied by JIT compiling, compilation time will be included.
-    gui = ti.GUI('BPT', (bpt.w, bpt.w))
+    gui = ti.GUI('BPT', (bpt.w, bpt.h))
     while gui.running:
         for e in gui.get_events(gui.PRESS):
             if e.key == gui.ESCAPE:
@@ -227,12 +214,10 @@ if __name__ == "__main__":
         bpt.render(emitter_pos)
         gui.set_image(bpt.pixels)
         gui.show()
+        if gui.running == False: break
         gui.clear()
         bpt.reset()
-    # if profiling:
-    #     ti.profiler.print_kernel_profiler_info() 
-    # ti.tools.imwrite(bpt.pixels.to_numpy(), "./blinn-phong.png")
 
-    # depth_map = bpt.depth_map.to_numpy()
-    # depth_map /= depth_map.max()
-    # ti.tools.imwrite(depth_map, "./depth.png")
+    if profiling:
+        ti.profiler.print_kernel_profiler_info() 
+    ti.tools.imwrite(bpt.pixels.to_numpy(), "./blinn-phong.png")

@@ -31,10 +31,10 @@ class BlinnPhong(BSDF):
         @author: Qianyue He
         @date: 2023-1-23
     """
-    def __init__(self, shininess):
-        super().__init__(None, "blinn-phong")
+    def __init__(self, reflectance, shininess):
+        super().__init__(reflectance, "blinn-phong")
         assert(shininess >= 1.0)    
         self.shininess = shininess
 
     def __repr__(self) -> str:
-        return f"<Blinn-Phong shininess class for Blinn-Phong tracer. Shininess = {self.shininess:.4f}>"
+        return f"<Blinn-Phong BSDF. Shininess = {self.shininess:.4f}. reflectance = {self.reflectance}>"
