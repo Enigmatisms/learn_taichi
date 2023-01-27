@@ -3,7 +3,7 @@
     @author Qianyue He
     @date 2023.1.19
 """
-__all__ = ["load_obj_file", "apply_transform"]
+__all__ = ['load_obj_file', 'apply_transform']
 
 import numpy as np
 import pywavefront as pwf

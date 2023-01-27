@@ -25,4 +25,4 @@ class PointSource(LightSource):
 
 
     def export(self) -> TaichiSource:
-        return TaichiSource(_type = 0, intensity = self.intensity, pos = vec3(self.pos))
+        return TaichiSource(_type = 0, intensity = vec3(self.intensity), pos = vec3(self.pos))

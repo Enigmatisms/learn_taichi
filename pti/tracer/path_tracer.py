@@ -21,6 +21,8 @@ from emitters.abtract_source import LightSource, TaichiSource
 from scene.obj_desc import ObjDescriptor
 from scene.xml_parser import mitsuba_parsing
 
+from sampler.general_sampling import *
+
 @ti.data_oriented
 class PathTracer(TracerBase):
     """
@@ -32,11 +34,13 @@ class PathTracer(TracerBase):
         """
             Implement path tracing algorithms first, then we can improve light source / BSDF / participating media
         """
+        self.cnt        = ti.field(ti.i32, ())
         self.src_num    = len(emitters)
-        self.pdf_sum    = ti.field(ti.f32, (self.w, self.h))               # progressive update
+        self.pdf_sum    = ti.field(ti.f32, (self.w, self.h))                # progressive update
         self.shininess  = ti.field(ti.f32, self.num_objects)
+        self.color      = ti.Vector.field(3, ti.f32, (self.w, self.h))      # color without normalization
         self.src_field  = TaichiSource.field()
-        ti.root.dense(ti.i, self.src_num).place(self.src_field)            # Light source Taichi storage
+        ti.root.dense(ti.i, self.src_num).place(self.src_field)             # Light source Taichi storage
 
         self.initialze(emitters, objects)
 
@@ -62,8 +66,29 @@ class PathTracer(TracerBase):
         idx = ti.random(int) % self.src_num
         return self.src_field[idx], 1. / self.src_num
 
+    @ti.func
+    def sample_ray_dir(self, ctr_dir: vec3, obj_id: int):
+        """
+
+            Sample according to bsdf type. This is a simple implementation. First we just \\
+            consider using shininess to determine sampling function. \\
+            - ctr_dir: new direction vector is sampled around this vector
+            - FIXME: BSDF should be formulated like emitters, declaring their types and parameters
+        """
+        shininess = self.shininess[obj_id]
+        local_new_dir = vec3([0, 0, 0])
+        pdf = 0.0
+        # This part should be upgraded to support more (and sophisticated) BSDF
+        if shininess > 1.5:
+            local_new_dir, pdf = ramped_hemisphere()
+        else:
+            local_new_dir, pdf = uniform_hemisphere()
+        R = rotation_between(vec3([0, 1, 0]), ctr_dir)
+        return R @ local_new_dir, pdf
+
     @ti.kernel
     def render(self):
+        self.cnt[None] += 1
         for i, j in self.pixels:
             ray_d = self.pix2ray(i, j)
             ray_o = self.cam_t
@@ -72,8 +97,8 @@ class PathTracer(TracerBase):
             pdf = 1.0
             contribution = vec3([1, 1, 1])
             for _ in range(self.max_bounce):
-                if contribution.max() < 5e-4: break     # contribution too small, break
                 if obj_id < 0: break                    # nothing is hit, break
+                if contribution.max() < 1e-4: break     # contribution too small, break
                 normal = self.normals[obj_id, tri_id]
                 hit_point  = ray_d * min_depth + ray_o
                 emitter, emitter_pdf = self.sample_light()
@@ -83,39 +108,46 @@ class PathTracer(TracerBase):
                 light_dir  = to_emitter / emitter_d
                 half_way = (0.5 * (light_dir - ray_d)).normalized()
                 spec = tm.pow(ti.max(tm.dot(half_way, normal), 0.0), self.shininess[obj_id])
-                # shadow ray? 
+                # shadow ray: intersect means the light source is shadowed 
                 if self.does_intersect(light_dir, hit_point, emitter_d):
                     emit_int.fill(0.0)
-                color += spec * emit_int * self.surf_color[obj_id] * contribution
-                contribution *= 1 - spec        # <light reflected> + <light transmitted> = 1.0
-                pdf *= (emit_pdf * emitter_pdf)
+                surf_color = self.surf_color[obj_id]
+                color += spec * emit_int * surf_color * contribution
+                contribution *= (1 - spec) * surf_color        # <light reflected> + <light transmitted> = 1.0
+                # update information
 
-                """
-                    TODO: recompute ray dir and calculate new intersection point
-                """
-                
+                ray_o = hit_point
+                ray_d, ray_pdf = self.sample_ray_dir(normal, obj_id)
+                pdf *= (emit_pdf * emitter_pdf * ray_pdf)
+                obj_id, tri_id, min_depth = self.ray_intersect(ray_d, ray_o)
+            self.color[i, j] += color                                 # PDF could be really small
+            # self.pdf_sum[i, j] += 1. / pdf
+            if i == 256 and j == 256:
+                print(color, pdf, self.color[i, j], self.pdf_sum[i, j], self.cnt[None])
+            self.pixels[i, j] = self.color[i, j] / self.cnt[None] # TODO: is this true?
+
 
 if __name__ == "__main__":
     profiling = False
     ti.init(kernel_profiler = profiling, default_ip = ti.i32, default_fp = ti.f32)
     emitter_configs, _, meshes, configs = mitsuba_parsing("../scene/test/", "test.xml")
-    emitter = emitter_configs[0]
-    emitter_pos = vec3(emitter.pos)
-    bpt = PathTracer(emitter, meshes, configs)
+    pt = PathTracer(emitter_configs, meshes, configs)
     # Note that direct test the rendering time (once) is meaningless, executing for the first time
     # will be accompanied by JIT compiling, compilation time will be included.
-    gui = ti.GUI('BPT', (bpt.w, bpt.h))
+    gui = ti.GUI('Path Tracing', (pt.w, pt.h))
     while gui.running:
         for e in gui.get_events(gui.PRESS):
             if e.key == gui.ESCAPE:
                 gui.running = False
-        bpt.render(emitter_pos)
-        gui.set_image(bpt.pixels)
+        pt.render()
+        gui.set_image(pt.pixels)
         gui.show()
         if gui.running == False: break
         gui.clear()
-        bpt.reset()
+        pt.reset()
 
     if profiling:
         ti.profiler.print_kernel_profiler_info() 
-    ti.tools.imwrite(bpt.pixels.to_numpy(), "./blinn-phong.png")
+    pixels = pt.pixels.to_numpy()
+    pixels /= pixels.max() * 0.95
+    ti.tools.imwrite(pixels, "./path-tracing.png")

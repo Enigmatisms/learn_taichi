@@ -6,7 +6,7 @@
 """
 import numpy as np
 
-__all__ = ["BlinnPhong"]
+__all__ = ['BlinnPhong']
 
 class BSDF:
     """

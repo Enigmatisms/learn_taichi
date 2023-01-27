@@ -43,7 +43,7 @@ class TracerBase:
         self.cam_orient = prop['transform'][0]                              # first field is camera orientation
         self.cam_orient /= np.linalg.norm(self.cam_orient)
         self.cam_t      = ti.Vector(prop['transform'][1])
-        self.cam_r      = ti.Matrix(rotation_between(np.float32([0, 0, 1]), self.cam_orient))
+        self.cam_r      = ti.Matrix(np_rotation_between(np.float32([0, 0, 1]), self.cam_orient))
         
         self.aabbs      = ti.Vector.field(3, ti.f32, (self.num_objects, 2))
         self.normals    = ti.Vector.field(3, ti.f32)
