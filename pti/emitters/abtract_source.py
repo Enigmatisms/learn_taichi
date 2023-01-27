@@ -24,28 +24,38 @@ class TaichiSource:
         node.place(pos); node.place(dirv); node.place(base_1); node.place(base_2); \\
         The following implementation is much simpler, and light source will not consume too much memory
     """
-    _type:  ti.i32      # 0 Point, 1 Area, 2 Spot, 3 Directional
-    pos:    vec3
-    dirv:   vec3
-    base_1: vec3
-    base_2: vec3
-    l1:     ti.f32
-    l2:     ti.f32
+    _type:      ti.i32      # 0 Point, 1 Area, 2 Spot, 3 Directional
+    intensity:  vec3
+    pos:        vec3
+    dirv:       vec3
+    base_1:     vec3
+    base_2:     vec3
+    l1:         ti.f32
+    l2:         ti.f32
 
-    def sample(self):
+    @ti.func
+    def sample(self, hit_pos: vec3):
         """
-            A unified sampling function, choose sampling strategy according to _type
+            A unified sampling function, choose sampling strategy according to _type \\
+            returns <sampled source point> <souce intensity> <sample pdf> 
         """
+        ret_int = self.intensity
+        ret_pos = self.pos
+        ret_pdf = 1.0
         if self._type == 0:     # point source
-            print("Shit 1")
-        elif self._type == 1:
-            print("Shit 2")
-
-    """
-        structs = TaichiSource.field()
-        ti.root.pointer(ti.i, 8).place(structs)
-        print(structs)
-    """
+            pass
+        elif self._type == 1:   # area source
+            pos_diff = hit_pos - self.pos
+            ret_pdf = 1. / (self.l1 * self.l2)
+            if ti.math.dot(pos_diff, self.dirv) < 0.0:
+                ret_int = vec3([0, 0, 0])
+            else:
+                rand_axis1 = ti.random(float) * 2.0 - 1.0
+                rand_axis2 = ti.random(float) * 2.0 - 1.0
+                v_axis1 = self.base_1 * self.l1 * rand_axis1
+                v_axis2 = self.base_2 * self.l2 * rand_axis2
+                ret_pos += v_axis1 + v_axis2
+        return ret_pos, ret_int, ret_pdf
 
 class LightSource:
     """

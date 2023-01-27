@@ -15,61 +15,32 @@ from taichi.math import vec3
 
 from typing import List
 from la.cam_transform import *
-from emitters.point import PointSource
-from emitters.rect_area import RectAreaSource
+from tracer.tracer_base import TracerBase
+from emitters.abtract_source import LightSource, TaichiSource
 
 from scene.obj_desc import ObjDescriptor
 from scene.xml_parser import mitsuba_parsing
 
 @ti.data_oriented
-class PathTracer:
+class PathTracer(TracerBase):
     """
         Simple Ray tracing using Bary-centric coordinates
         This tracer can yield result with global illumination effect
     """
-    def __init__(self, emitter: PointSource, objects: List[ObjDescriptor], prop: dict):
-        self.w          = prop['film']['width']                              # image is a standard square
-        self.h          = prop['film']['height']
-        self.sample_cnt = prop['sample_count']
-        self.max_bounce = prop['max_bounce']
-        self.use_rr     = prop['use_rr']
-
-        self.focal      = fov2focal(prop['fov'], min(self.w, self.h))
-        self.inv_focal  = 1. / self.focal
-        self.half_w     = self.w / 2
-        self.half_h     = self.h / 2
-
-        self.num_objects = len(objects)
-        max_tri_num = max([obj.tri_num for obj in objects])
-        self.emit_int = ti.Vector(emitter.intensity, dt = ti.f32)       
-
-        self.cam_orient = prop['transform'][0]                              # first field is camera orientation
-        self.cam_orient /= np.linalg.norm(self.cam_orient)
-        self.cam_t      = ti.Vector(prop['transform'][1])
-        self.cam_r      = ti.Matrix(rotation_between(np.float32([0, 0, 1]), self.cam_orient))
-        
-        self.aabbs      = ti.Vector.field(3, ti.f32, (self.num_objects, 2))
-        self.normals    = ti.Vector.field(3, ti.f32)
-        self.meshes     = ti.Vector.field(3, dtype = ti.f32)               # leveraging SSDS, shape (N, mesh_num, 3) - vector3d
-        self.surf_color = ti.Vector.field(3, ti.f32, self.num_objects)
-        self.pixels = ti.Vector.field(3, ti.f32, (self.w, self.h))         # output: color
-
+    def __init__(self, emitters: List[LightSource], objects: List[ObjDescriptor], prop: dict):
+        super().__init__(objects, prop)
+        """
+            Implement path tracing algorithms first, then we can improve light source / BSDF / participating media
+        """
+        self.src_num    = len(emitters)
         self.pdf_sum    = ti.field(ti.f32, (self.w, self.h))               # progressive update
-        self.mesh_nodes = ti.root.dense(ti.i, self.num_objects)
-        self.mesh_nodes.bitmasked(ti.j, max_tri_num).dense(ti.k, 3).place(self.meshes)      # for simple shapes, this would be efficient
-        self.mesh_nodes.bitmasked(ti.j, max_tri_num).place(self.normals)
-        self.mesh_cnt   = ti.field(ti.i32, self.num_objects)
         self.shininess  = ti.field(ti.f32, self.num_objects)
+        self.src_field  = TaichiSource.field()
+        ti.root.dense(ti.i, self.src_num).place(self.src_field)            # Light source Taichi storage
 
-        self.initialze(objects)
+        self.initialze(emitters, objects)
 
-    def __repr__(self):
-        """
-            For debug purpose
-        """
-        return f"bpt: number of object {self.num_objects}, w, h: ({self.w}, {self.h}), sample count: {self.sample_cnt}. Focal: {self.focal}"
-
-    def initialze(self, objects: List[ObjDescriptor]):
+    def initialze(self, emitters: List[LightSource], objects: List[ObjDescriptor]):
         for i, obj in enumerate(objects):
             for j, (mesh, normal) in enumerate(zip(obj.meshes, obj.normals)):
                 for k in range(3):
@@ -77,115 +48,56 @@ class PathTracer:
                 self.normals[i, j] = ti.Vector(normal) 
             self.mesh_cnt[i]    = obj.tri_num
             self.shininess[i]   = obj.bsdf.shininess
+            self.surf_color[i]  = ti.Vector(obj.bsdf.reflectance)
             self.aabbs[i, 0]    = ti.Matrix(obj.aabb[0])       # unrolled
             self.aabbs[i, 1]    = ti.Matrix(obj.aabb[1])
-            self.surf_color[i]  = ti.Vector(obj.bsdf.reflectance)
+        for i, emitter in enumerate(emitters):
+            self.src_field[i] = emitter.export()
 
     @ti.func
-    def pix2ray(self, i, j):
+    def sample_light(self):
         """
-            Convert pixel coordinate to ray direction
+            return selected light source and pdf
         """
-        pi = float(i)
-        pj = float(j)
-        cam_dir = vec3([(pi - self.half_w + 0.5) * self.inv_focal, (pj - self.half_h + 0.5) * self.inv_focal, 1.])
-        return (self.cam_r @ cam_dir).normalized()
-
-    @ti.func
-    def ray_intersect(self, ray, start_p, min_depth = -1.0):
-        """
-            Intersection function and mesh organization can be reused
-        """
-        obj_id = -1
-        tri_id = -1
-        if min_depth > 0.0:
-            start_p += ray * 1e-3
-            min_depth -= 2e-3
-        else:
-            min_depth = 1e7
-        for aabb_idx in range(self.num_objects):
-            if self.aabb_test(aabb_idx, ray, start_p) == False: continue
-            tri_num = self.mesh_cnt[aabb_idx]
-            for mesh_idx in range(tri_num):
-                normal = self.normals[aabb_idx, mesh_idx]
-                if tm.dot(ray, normal) >= 0.0: continue     # back-face culling
-                # Sadly, Taichi does not support slicing. I think this restrict the use cases of Matrix field
-                p1 = self.meshes[aabb_idx, mesh_idx, 0]
-                vec1 = self.meshes[aabb_idx, mesh_idx, 1] - p1
-                vec2 = self.meshes[aabb_idx, mesh_idx, 2] - p1
-                mat = ti.Matrix.cols([vec1, vec2, -ray]).inverse()
-                u, v, t = mat @ (start_p - p1)
-                if u >= 0 and v >= 0 and u + v <= 1.0:
-                    if t > 0 and t < min_depth:
-                        min_depth = t
-                        obj_id = aabb_idx
-                        tri_id = mesh_idx
-        return (obj_id, tri_id, min_depth)
-
-    @ti.func
-    def does_intersect(self, ray, start_p, depth = -1.0) -> bool:
-        """
-            Faster (greedy) checking for intersection, returns True if intersect anything within depth \\
-            If depth is None (not specified), then depth range will be a large float (1e7) \\
-            Taichi does not support compile-time branching. Actually it does, but not flexible, for e.g \\
-            C++ supports compile-time branching via template parameter, but Taichi can not "pass" compile-time constants
-        """
-        if depth > 0.0:
-            start_p += ray * 1e-3
-            depth -= 2e-3
-        else:
-            depth = 1e7
-        flag = False
-        for aabb_idx in range(self.num_objects):
-            if self.aabb_test(aabb_idx, ray, start_p) == False: continue
-            tri_num = self.mesh_cnt[aabb_idx]
-            for mesh_idx in range(tri_num):
-                normal = self.normals[aabb_idx, mesh_idx]
-                if tm.dot(ray, normal) >= 0.0: continue     # back-face culling
-                p1 = self.meshes[aabb_idx, mesh_idx, 0]
-                vec1 = self.meshes[aabb_idx, mesh_idx, 1] - p1
-                vec2 = self.meshes[aabb_idx, mesh_idx, 2] - p1
-                mat = ti.Matrix.cols([vec1, vec2, -ray]).inverse()
-                u, v, t = mat @ (start_p - p1)
-                if u >= 0 and v >= 0 and u + v <= 1.0:
-                    if t > 0 and t < depth:
-                        flag = True
-                        break
-            if flag == True: break
-        return flag
+        idx = ti.random(int) % self.src_num
+        return self.src_field[idx], 1. / self.src_num
 
     @ti.kernel
-    def render(self, emit_pos: vec3):
+    def render(self):
         for i, j in self.pixels:
-            ray = self.pix2ray(i, j)
-            obj_id, tri_id, min_depth = self.ray_intersect(ray, self.cam_t)
-            for bounce in range(self.max_bounce):
-                """
-                    To be implemented
-                """
-                pass
+            ray_d = self.pix2ray(i, j)
+            ray_o = self.cam_t
+            obj_id, tri_id, min_depth = self.ray_intersect(ray_d, ray_o)
+            color = vec3([0, 0, 0])
+            pdf = 1.0
+            contribution = vec3([1, 1, 1])
+            for _ in range(self.max_bounce):
+                if contribution.max() < 5e-4: break     # contribution too small, break
+                if obj_id < 0: break                    # nothing is hit, break
+                normal = self.normals[obj_id, tri_id]
+                hit_point  = ray_d * min_depth + ray_o
+                emitter, emitter_pdf = self.sample_light()
+                emit_pos, emit_int, emit_pdf = emitter.sample(hit_point)        # sample light
+                to_emitter = emit_pos - hit_point
+                emitter_d  = to_emitter.norm()
+                light_dir  = to_emitter / emitter_d
+                half_way = (0.5 * (light_dir - ray_d)).normalized()
+                spec = tm.pow(ti.max(tm.dot(half_way, normal), 0.0), self.shininess[obj_id])
+                # shadow ray? 
+                if self.does_intersect(light_dir, hit_point, emitter_d):
+                    emit_int.fill(0.0)
+                color += spec * emit_int * self.surf_color[obj_id] * contribution
+                contribution *= 1 - spec        # <light reflected> + <light transmitted> = 1.0
+                pdf *= (emit_pdf * emitter_pdf)
 
-    @ti.kernel
-    def reset(self):
-        for i, j in self.pixels:
-            self.pixels[i, j].fill(0.0)
-    
-    @ti.func
-    def aabb_test(self, aabb_idx, ray: vec3, ray_o: vec3):
-        """
-            AABB used to skip some of the objects
-        """
-        t_min = (self.aabbs[aabb_idx, 0] - ray_o) / ray
-        t_max = (self.aabbs[aabb_idx, 1] - ray_o) / ray
-        t1 = ti.min(t_min, t_max)
-        t2 = ti.max(t_min, t_max)
-        t_near  = ti.max(ti.max(t1.x, t1.y), t1.z)
-        t_far   = ti.min(ti.min(t2.x, t2.y), t2.z)
-        return t_near < t_far
+                """
+                    TODO: recompute ray dir and calculate new intersection point
+                """
+                
 
 if __name__ == "__main__":
     profiling = False
-    ti.init(kernel_profiler = profiling)
+    ti.init(kernel_profiler = profiling, default_ip = ti.i32, default_fp = ti.f32)
     emitter_configs, _, meshes, configs = mitsuba_parsing("../scene/test/", "test.xml")
     emitter = emitter_configs[0]
     emitter_pos = vec3(emitter.pos)
@@ -197,20 +109,6 @@ if __name__ == "__main__":
         for e in gui.get_events(gui.PRESS):
             if e.key == gui.ESCAPE:
                 gui.running = False
-            elif e.key == 'a':
-                emitter_pos[0] -= 0.05
-            elif e.key == 'd':
-                emitter_pos[0] += 0.05
-            elif e.key == gui.DOWN:
-                emitter_pos[1] -= 0.05
-            elif e.key == gui.UP:
-                emitter_pos[1] += 0.05
-            elif e.key == 'd':
-                emitter_pos[0] += 0.05
-            elif e.key == 's':
-                emitter_pos[2] -= 0.05
-            elif e.key == 'w':
-                emitter_pos[2] += 0.05
         bpt.render(emitter_pos)
         gui.set_image(bpt.pixels)
         gui.show()

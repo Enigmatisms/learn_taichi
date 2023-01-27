@@ -33,6 +33,10 @@ class RectAreaSource(LightSource):
                 self.base_1 = vec3d_parse(point)
             elif name == "base_2":
                 self.base_2 = vec3d_parse(point)
+        self.normal = np.cross(self.base_1, self.base_2)
+        bool_elem = elem.find("boolean")
+        if bool_elem is not None and bool_elem.get("value").lower() == "true":
+            self.normal *= -1
         assert(self.ctr_pos is not None)
 
         self.l1 = -1.0
@@ -47,7 +51,7 @@ class RectAreaSource(LightSource):
 
     def export(self) -> TaichiSource:
         return TaichiSource(
-            _type = 0, intensity = self.intensity, pos = vec3(self.pos), 
+            _type = 0, intensity = self.intensity, pos = vec3(self.pos), dirv = vec3(self.normal),
             base_1 = vec3(self.base_1), base_2 = vec3(self.base_2), l1 = self.l1, l2 = self.l2
         )
         

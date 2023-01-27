@@ -8,7 +8,6 @@
 import sys
 sys.path.append("..")
 
-import numpy as np
 import taichi as ti
 import taichi.math as tm
 from taichi.math import vec3
