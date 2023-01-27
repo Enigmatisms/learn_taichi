@@ -48,10 +48,11 @@
 		<float name="shininess" value="4.0"/>
 	</bsdf>
 
-	<emitter type="point">
+	<emitter type="rect_area">
 		<rgb name="reflectance" value="6.0, 5.0, 4.0"/>
-		<float name="half_decay" value="1.0"/>
-		<point name="position" x="2.79" y="4.73" z="2.51"/>
+		<point name="center" x="2.79" y="5.488000" z="2.51"/>
+		<float name="l1" value="1.0"/>
+		<float name="l2" value="0.6"/>
 	</emitter>
 
 	<shape type="obj">

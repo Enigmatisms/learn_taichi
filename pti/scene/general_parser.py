@@ -43,7 +43,7 @@ def rgb_parse(elem: xet.Element):
                 return parse_str(val_str)
 
 def vec3d_parse(elem: xet.Element):
-    if elem.tag == "point" and elem.get("name") in ("position", "direction"):
+    if elem.tag == "point" and elem.get("name") in ("position", "direction", "center"):
         return np.float32([get(elem, "x"), get(elem, "y"), get(elem, "z")])
 
 def transform_parse(transform_elem: xet.Element) -> Tuple[Arr, Arr]:

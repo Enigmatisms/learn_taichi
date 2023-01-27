@@ -50,8 +50,8 @@ class TaichiSource:
             if ti.math.dot(pos_diff, self.dirv) < 0.0:
                 ret_int = vec3([0, 0, 0])
             else:
-                rand_axis1 = ti.random(float) * 2.0 - 1.0
-                rand_axis2 = ti.random(float) * 2.0 - 1.0
+                rand_axis1 = ti.random(float) * - 0.5
+                rand_axis2 = ti.random(float) * - 0.5
                 v_axis1 = self.base_1 * self.l1 * rand_axis1
                 v_axis2 = self.base_2 * self.l2 * rand_axis2
                 ret_pos += v_axis1 + v_axis2
