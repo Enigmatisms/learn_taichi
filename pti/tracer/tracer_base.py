@@ -19,6 +19,9 @@ from la.cam_transform import *
 from scene.obj_desc import ObjDescriptor
 from scene.xml_parser import mitsuba_parsing
 
+__eps__ = 1e-4
+__inv_eps__ = 1 - __eps__ * 2.
+
 @ti.data_oriented
 class TracerBase:
     """
@@ -66,13 +69,18 @@ class TracerBase:
         pass
 
     @ti.func
-    def pix2ray(self, i, j):
+    def pix2ray(self, i, j, anti_alias):
         """
             Convert pixel coordinate to ray direction
         """
         pi = float(i)
         pj = float(j)
-        cam_dir = vec3([(pi - self.half_w + 0.5) * self.inv_focal, (pj - self.half_h + 0.5) * self.inv_focal, 1.])
+        vx = 0.5
+        vy = 0.5
+        if anti_alias:
+            vx = ti.random(float) * __inv_eps__ + __eps__
+            vy = ti.random(float) * __inv_eps__ + __eps__
+        cam_dir = vec3([(self.half_w + vx - pi) * self.inv_focal, (pj - self.half_h + vy) * self.inv_focal, 1.])
         return (self.cam_r @ cam_dir).normalized()
 
     @ti.func
@@ -142,7 +150,7 @@ class TracerBase:
             tri_num = self.mesh_cnt[aabb_idx]
             for mesh_idx in range(tri_num):
                 normal = self.normals[aabb_idx, mesh_idx]
-                if tm.dot(ray, normal) >= 0.0: continue     # back-face culling
+                # if tm.dot(ray, normal) >= 0.0: continue     # back-face culling
                 p1 = self.meshes[aabb_idx, mesh_idx, 0]
                 vec1 = self.meshes[aabb_idx, mesh_idx, 1] - p1
                 vec2 = self.meshes[aabb_idx, mesh_idx, 2] - p1

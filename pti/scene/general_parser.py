@@ -63,7 +63,7 @@ def transform_parse(transform_elem: xet.Element) -> Tuple[Arr, Arr]:
                 r_angle = get(child, "r")   # roll
                 p_angle = get(child, "p")   # pitch
                 y_angle = get(child, "y")   # yaw
-                trans_r = Rot.from_euler("xyz", (r_angle, p_angle, y_angle), degrees = True).as_matrix()
+                trans_r = Rot.from_euler("zxy", (r_angle, p_angle, y_angle), degrees = True).as_matrix()
             elif rot_type == "quaternion":
                 trans_r = Rot.from_quat([get(child, "x"), get(child, "y"), get(child, "z"), get(child, "w")])
             elif rot_type == "angle-axis":

@@ -34,6 +34,8 @@ class PathTracer(TracerBase):
         """
             Implement path tracing algorithms first, then we can improve light source / BSDF / participating media
         """
+        self.anti_alias = prop['anti_alias']
+
         self.cnt        = ti.field(ti.i32, ())
         self.src_num    = len(emitters)
         self.pdf_sum    = ti.field(ti.f32, (self.w, self.h))                # progressive update
@@ -90,40 +92,42 @@ class PathTracer(TracerBase):
     def render(self):
         self.cnt[None] += 1
         for i, j in self.pixels:
-            ray_d = self.pix2ray(i, j)
+            ray_d = self.pix2ray(i, j, self.anti_alias)
             ray_o = self.cam_t
             obj_id, tri_id, min_depth = self.ray_intersect(ray_d, ray_o)
             color = vec3([0, 0, 0])
-            pdf = 1.0
             contribution = vec3([1, 1, 1])
+            bounce_cnt = 0
             for _ in range(self.max_bounce):
+                bounce_cnt += 1
                 if obj_id < 0: break                    # nothing is hit, break
-                if contribution.max() < 1e-4: break     # contribution too small, break
+                if contribution.max() < 1e-5: break     # contribution too small, break
                 normal = self.normals[obj_id, tri_id]
                 hit_point  = ray_d * min_depth + ray_o
                 emitter, emitter_pdf = self.sample_light()
                 emit_pos, emit_int, emit_pdf = emitter.sample(hit_point)        # sample light
+
                 to_emitter = emit_pos - hit_point
                 emitter_d  = to_emitter.norm()
                 light_dir  = to_emitter / emitter_d
                 half_way = (0.5 * (light_dir - ray_d)).normalized()
-                spec = tm.pow(ti.max(tm.dot(half_way, normal), 0.0), self.shininess[obj_id])
+                shininess = self.shininess[obj_id]
+                spec = tm.pow(ti.max(tm.dot(half_way, normal), 0.0), shininess)
+                contrib_att = tm.pow(ti.max(tm.dot(-ray_d, normal), 0.0), shininess)
+                ray_o = hit_point
+                ray_d, ray_pdf = self.sample_ray_dir(normal, obj_id)
                 # shadow ray: intersect means the light source is shadowed 
                 if self.does_intersect(light_dir, hit_point, emitter_d):
                     emit_int.fill(0.0)
-                surf_color = self.surf_color[obj_id]
-                color += spec * emit_int * surf_color * contribution
-                contribution *= (1 - spec) * surf_color        # <light reflected> + <light transmitted> = 1.0
-                # update information
+                contribution *= self.surf_color[obj_id]       # <light reflected> + <light transmitted> = 1.0
+                color += spec * emit_int * contribution / (emitter_pdf * emit_pdf)
+                contribution *= contrib_att
 
-                ray_o = hit_point
-                ray_d, ray_pdf = self.sample_ray_dir(normal, obj_id)
-                pdf *= (emit_pdf * emitter_pdf * ray_pdf)
                 obj_id, tri_id, min_depth = self.ray_intersect(ray_d, ray_o)
-            self.color[i, j] += color                                 # PDF could be really small
+            self.color[i, j] += color / float(bounce_cnt)                                # PDF could be really small
             # self.pdf_sum[i, j] += 1. / pdf
             if i == 256 and j == 256:
-                print(color, pdf, self.color[i, j], self.pdf_sum[i, j], self.cnt[None])
+                print(color, self.color[i, j], self.pdf_sum[i, j], self.cnt[None])
             self.pixels[i, j] = self.color[i, j] / self.cnt[None] # TODO: is this true?
 
 
@@ -149,5 +153,4 @@ if __name__ == "__main__":
     if profiling:
         ti.profiler.print_kernel_profiler_info() 
     pixels = pt.pixels.to_numpy()
-    pixels /= pixels.max() * 0.95
     ti.tools.imwrite(pixels, "./path-tracing.png")

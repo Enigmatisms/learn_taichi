@@ -11,6 +11,7 @@
         <integer name="sample_count" value="128"/>
         <integer name="max_bounce" value="16"/>
         <boolean name="use_rr" value="false"/>			<!-- Whether to use Russian roulette ray termination -->
+        <boolean name="anti_alias" value="true"/>       <!-- Only useful in progressive path tracer -->
 
 		<transform name="toWorld">
 			<lookat target="2.78, 2.73, -7.99" origin="2.78, 2.73, -8.00" up="0, 1, 0"/>
@@ -25,7 +26,7 @@
 
 	<bsdf type="blinn-phong" id="box">
 		<rgb name="reflectance" value="#BCBCBC"/>
-		<float name="shininess" value="5.0"/>
+		<float name="shininess" value="1.0"/>
 	</bsdf>
 
 	<bsdf type="blinn-phong" id="large_box">
@@ -39,18 +40,18 @@
 	</bsdf>
 
 	<bsdf type="blinn-phong" id="left_wall">
-		<rgb name="reflectance" value="#25DD25"/>
-		<float name="shininess" value="3.0"/>
+		<rgb name="reflectance" value="#DD2525"/>
+		<float name="shininess" value="1.0"/>
 	</bsdf>
 
 	<bsdf type="blinn-phong" id="right_wall">
-		<rgb name="reflectance" value="#DD2525"/>
-		<float name="shininess" value="4.0"/>
+		<rgb name="reflectance" value="#25DD25"/>
+		<float name="shininess" value="1.0"/>
 	</bsdf>
 
 	<emitter type="rect_area">
-		<rgb name="reflectance" value="6.0, 5.0, 4.0"/>
-		<point name="center" x="2.79" y="5.488000" z="2.51"/>
+		<rgb name="reflectance" value="4.0, 3.5, 3.0"/>
+		<point name="center" x="1.79" y="5.47000" z="2.51"/>
 		<float name="l1" value="1.0"/>
 		<float name="l2" value="0.6"/>
 	</emitter>
@@ -86,11 +87,17 @@
 
 	<shape type="obj">
 		<string name="filename" value="meshes/cbox_smallbox.obj"/>
+		<transform name="toWorld">
+			<rotate type="euler" r="0.0" p="0.0" y="0"/>
+		</transform>
 		<ref id="box"/>
 	</shape>
 
 	<shape type="obj">
 		<string name="filename" value="meshes/cbox_largebox.obj"/>
+		<transform name="toWorld">
+			<rotate type="euler" r="0.0" p="0.0" y="-0"/>
+		</transform>
 		<ref id="large_box"/>
 	</shape>
 </scene>
