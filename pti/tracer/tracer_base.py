@@ -84,10 +84,6 @@ class TracerBase:
         return (self.cam_r @ cam_dir).normalized()
 
     @ti.func
-    def distance_attenuate(self, x):
-        return ti.min(1.0 / (1e-5 + x ** 2), 1e5)
-
-    @ti.func
     def aabb_test(self, aabb_idx, ray: vec3, ray_o: vec3):
         """
             AABB used to skip some of the objects
@@ -149,8 +145,6 @@ class TracerBase:
             if self.aabb_test(aabb_idx, ray, start_p) == False: continue
             tri_num = self.mesh_cnt[aabb_idx]
             for mesh_idx in range(tri_num):
-                normal = self.normals[aabb_idx, mesh_idx]
-                # if tm.dot(ray, normal) >= 0.0: continue     # back-face culling
                 p1 = self.meshes[aabb_idx, mesh_idx, 0]
                 vec1 = self.meshes[aabb_idx, mesh_idx, 1] - p1
                 vec2 = self.meshes[aabb_idx, mesh_idx, 2] - p1

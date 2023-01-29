@@ -43,11 +43,11 @@ class RectAreaSource(LightSource):
         self.l2 = -1.0
         float_elems = elem.findall("float")
         for float_elem in float_elems:
-            if float_elem.get("name") == "width":
-                self.l1 = float(float_elem.get("l1"))
-            elif float_elem.get("name") == "height":
-                self.l2 = float(float_elem.get("l2"))
-        assert(self.l1 > 0.0, self.l2 > 0.0)
+            if float_elem.get("name") in ("width", "l1"):
+                self.l1 = float(float_elem.get("value"))
+            elif float_elem.get("name") in ("height", "l2"):
+                self.l2 = float(float_elem.get("value"))
+        assert(self.l1 > 0.0 and self.l2 > 0.0)
 
     def export(self) -> TaichiSource:
         return TaichiSource(

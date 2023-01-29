@@ -71,7 +71,7 @@ class BlinnPhongTracer(TracerBase):
                 # the ray direction vector in half way vector should point from hit point to cam
                 half_way = (0.5 * (light_dir - ray)).normalized()
                 spec = tm.pow(ti.max(tm.dot(half_way, normal), 0.0), self.shininess[obj_id])
-                spec *= self.distance_attenuate(emitter_d)
+                spec *= ti.min(1.0 / (1e-5 + emitter_d ** 2), 1e5)
                 if self.does_intersect(light_dir, hit_point, emitter_d):
                     spec *= 0.1
                 self.pixels[i, j] = spec * self.emit_int * self.surf_color[obj_id]

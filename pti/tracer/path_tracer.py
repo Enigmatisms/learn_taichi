@@ -81,12 +81,12 @@ class PathTracer(TracerBase):
         local_new_dir = vec3([0, 0, 0])
         pdf = 0.0
         # This part should be upgraded to support more (and sophisticated) BSDF
-        if shininess > 1.5:
-            local_new_dir, pdf = ramped_hemisphere()
+        if shininess > 0.5:
+            local_new_dir, pdf = cosine_hemisphere()
         else:
             local_new_dir, pdf = uniform_hemisphere()
         R = rotation_between(vec3([0, 1, 0]), ctr_dir)
-        return R @ local_new_dir, pdf
+        return (R @ local_new_dir).normalized(), pdf
 
     @ti.kernel
     def render(self):
@@ -97,43 +97,43 @@ class PathTracer(TracerBase):
             obj_id, tri_id, min_depth = self.ray_intersect(ray_d, ray_o)
             color = vec3([0, 0, 0])
             contribution = vec3([1, 1, 1])
-            bounce_cnt = 0
             for _ in range(self.max_bounce):
-                bounce_cnt += 1
                 if obj_id < 0: break                    # nothing is hit, break
-                if contribution.max() < 1e-5: break     # contribution too small, break
+                if contribution.max() < 1e-4: break     # contribution too small, break
                 normal = self.normals[obj_id, tri_id]
                 hit_point  = ray_d * min_depth + ray_o
                 emitter, emitter_pdf = self.sample_light()
                 emit_pos, emit_int, emit_pdf = emitter.sample(hit_point)        # sample light
 
+                # TODO: the calculation of half_way vector should be moved into BSDF
                 to_emitter = emit_pos - hit_point
                 emitter_d  = to_emitter.norm()
                 light_dir  = to_emitter / emitter_d
-                half_way = (0.5 * (light_dir - ray_d)).normalized()
+                half_way = (light_dir - ray_d).normalized()
                 shininess = self.shininess[obj_id]
-                spec = tm.pow(ti.max(tm.dot(half_way, normal), 0.0), shininess)
-                contrib_att = tm.pow(ti.max(tm.dot(-ray_d, normal), 0.0), shininess)
+                # direct reflection (non-recursive)
                 ray_o = hit_point
                 ray_d, ray_pdf = self.sample_ray_dir(normal, obj_id)
+                # VERY IMPORTANT: indirect illumination attentuation calculated after sampling new direction 
+                spec_att = tm.pow(ti.max(tm.dot(half_way, normal), 0.0), shininess)
+                # indirect reflection (recursive)
+                contrib_att = ti.max(tm.dot(ray_d, normal), 0.0)                
                 # shadow ray: intersect means the light source is shadowed 
                 if self.does_intersect(light_dir, hit_point, emitter_d):
                     emit_int.fill(0.0)
-                contribution *= self.surf_color[obj_id]       # <light reflected> + <light transmitted> = 1.0
-                color += spec * emit_int * contribution / (emitter_pdf * emit_pdf)
-                contribution *= contrib_att
-
+                contribution *= self.surf_color[obj_id] / tm.pi    # <light reflected> + <light absorbed> = 1.0
+                color += spec_att * emit_int * contribution / (emitter_pdf * emit_pdf)
+                contribution *= contrib_att / ray_pdf
                 obj_id, tri_id, min_depth = self.ray_intersect(ray_d, ray_o)
-            self.color[i, j] += color / float(bounce_cnt)                                # PDF could be really small
+            # I designed dividing by normalize pdf, otherwise the result will explode  
+            self.color[i, j] += color
             # self.pdf_sum[i, j] += 1. / pdf
-            if i == 256 and j == 256:
-                print(color, self.color[i, j], self.pdf_sum[i, j], self.cnt[None])
             self.pixels[i, j] = self.color[i, j] / self.cnt[None] # TODO: is this true?
 
 
 if __name__ == "__main__":
     profiling = False
-    ti.init(kernel_profiler = profiling, default_ip = ti.i32, default_fp = ti.f32)
+    ti.init(arch = ti.cpu, kernel_profiler = profiling, default_ip = ti.i32, default_fp = ti.f32)
     emitter_configs, _, meshes, configs = mitsuba_parsing("../scene/test/", "test.xml")
     pt = PathTracer(emitter_configs, meshes, configs)
     # Note that direct test the rendering time (once) is meaningless, executing for the first time

@@ -34,27 +34,35 @@ class TaichiSource:
     l2:         ti.f32
 
     @ti.func
+    def distance_attenuate(self, x: vec3):
+        return ti.min(1.0 / (1e-5 + x.norm_sqr()), 1e5)
+
+    @ti.func
     def sample(self, hit_pos: vec3):
         """
             A unified sampling function, choose sampling strategy according to _type \\
+            input ray hit point \\
             returns <sampled source point> <souce intensity> <sample pdf> 
         """
         ret_int = self.intensity
         ret_pos = self.pos
         ret_pdf = 1.0
         if self._type == 0:     # point source
-            pass
+            ret_int *= self.distance_attenuate(hit_pos - ret_pos)
         elif self._type == 1:   # area source
-            pos_diff = hit_pos - self.pos
             ret_pdf = 1. / (self.l1 * self.l2)
-            if ti.math.dot(pos_diff, self.dirv) < 0.0:
+            dot_light = ti.math.dot(hit_pos - self.pos, self.dirv)
+            if dot_light <= 0.0:
                 ret_int = vec3([0, 0, 0])
+                ret_pdf = 1.0
             else:
-                rand_axis1 = ti.random(float) * - 0.5
-                rand_axis2 = ti.random(float) * - 0.5
+                rand_axis1 = ti.random(float) - 0.5
+                rand_axis2 = ti.random(float) - 0.5
+
                 v_axis1 = self.base_1 * self.l1 * rand_axis1
                 v_axis2 = self.base_2 * self.l2 * rand_axis2
-                ret_pos += v_axis1 + v_axis2
+                ret_pos += (v_axis1 + v_axis2)
+                ret_int *= (self.distance_attenuate(ret_pos - hit_pos) * dot_light)
         return ret_pos, ret_int, ret_pdf
 
 class LightSource:
