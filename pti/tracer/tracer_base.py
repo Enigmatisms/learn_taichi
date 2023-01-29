@@ -51,7 +51,6 @@ class TracerBase:
         self.aabbs      = ti.Vector.field(3, ti.f32, (self.num_objects, 2))
         self.normals    = ti.Vector.field(3, ti.f32)
         self.meshes     = ti.Vector.field(3, dtype = ti.f32)               # leveraging SSDS, shape (N, mesh_num, 3) - vector3d
-        self.surf_color = ti.Vector.field(3, ti.f32, self.num_objects)
         self.pixels = ti.Vector.field(3, ti.f32, (self.w, self.h))         # output: color
 
         self.mesh_nodes = ti.root.dense(ti.i, self.num_objects)
