@@ -33,9 +33,10 @@ class BlinnPhongTracer(TracerBase):
     """
     def __init__(self, emitter: PointSource, objects: List[ObjDescriptor], prop: dict):
         super().__init__(objects, prop)
-        self.emit_int = ti.Vector(emitter.intensity, dt = ti.f32)       
-
-        self.shininess  = ti.field(ti.f32, self.num_objects)
+        self.emit_int = ti.Vector(emitter.intensity, dt = ti.f32)   
+            
+        self.surf_color = ti.Vector.field(3, ti.f32, self.num_objects)
+        self.shininess  = ti.Vector.field(3, ti.f32, self.num_objects)
         self.depth_map  = ti.field(ti.f32, (self.w, self.h))                # output: gray-scale
 
         self.initialze(objects)
@@ -47,10 +48,10 @@ class BlinnPhongTracer(TracerBase):
                     self.meshes[i, j, k]  = ti.Vector(mesh[k])
                 self.normals[i, j] = ti.Vector(normal) 
             self.mesh_cnt[i]    = obj.tri_num
-            self.shininess[i]   = obj.bsdf.shininess
+            self.shininess[i]   = obj.bsdf.k_g
             self.aabbs[i, 0]    = ti.Matrix(obj.aabb[0])       # unrolled
             self.aabbs[i, 1]    = ti.Matrix(obj.aabb[1])
-            self.surf_color[i]  = ti.Vector(obj.bsdf.reflectance)
+            self.surf_color[i]  = ti.Vector(obj.bsdf.k_d)
 
     @ti.kernel
     def render(self, emit_pos: vec3):
@@ -83,7 +84,7 @@ class BlinnPhongTracer(TracerBase):
 if __name__ == "__main__":
     profiling = False
     ti.init(kernel_profiler = profiling)
-    emitter_configs, _, meshes, configs = mitsuba_parsing("../scene/test/", "test.xml")
+    emitter_configs, _, meshes, configs = mitsuba_parsing("../scene/test/", "point_cbox.xml")
     emitter = emitter_configs[0]
     emitter_pos = vec3(emitter.pos)
     bpt = BlinnPhongTracer(emitter, meshes, configs)
@@ -95,9 +96,9 @@ if __name__ == "__main__":
             if e.key == gui.ESCAPE:
                 gui.running = False
             elif e.key == 'a':
-                emitter_pos[0] -= 0.05
-            elif e.key == 'd':
                 emitter_pos[0] += 0.05
+            elif e.key == 'd':
+                emitter_pos[0] -= 0.05
             elif e.key == gui.DOWN:
                 emitter_pos[1] -= 0.05
             elif e.key == gui.UP:

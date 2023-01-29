@@ -15,7 +15,7 @@ import xml.etree.ElementTree as xet
 from typing import List
 from numpy import ndarray as Arr
 
-from bsdf.bsdfs import BlinnPhong
+from bsdf.bsdfs import BSDF_np
 
 from scene.obj_loader import *
 from scene.obj_desc import ObjDescriptor
@@ -75,23 +75,12 @@ def parse_bsdf(bsdf_list: List[xet.Element]):
     """
         Parsing wavefront obj file (filename) from list of xml nodes    
         note that participating medium is complex, therefore will not be added in the early stage
-        FIXME: bsdf is of the lowest priority, only after tracer is completed can this gets implemented
         return: dict
     """
     results = dict()
     for bsdf_node in bsdf_list:
-        bsdf_type = bsdf_node.get("type")
         bsdf_id = bsdf_node.get("id")
-        # FIXME: to be implemented
-        if bsdf_type == "blinn-phong":
-            rgb_node = bsdf_node.find("rgb")
-            if rgb_node is not None:
-                reflectance = rgb_parse(rgb_node)
-            else:
-                reflectance = np.ones(3, np.float32)
-            bsdf = BlinnPhong(reflectance, get(bsdf_node.find("float"), "value"))
-        else:
-            raise NotImplementedError(f"Work for BSDF type of {bsdf_type} is on the way")
+        bsdf = BSDF_np(bsdf_node)
         if bsdf_id in results:
             print(f"Warning: BSDF {bsdf_id} re-defined in XML file. Overwriting the existing BSDF.")
         results[bsdf_id] = bsdf

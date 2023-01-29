@@ -18,6 +18,7 @@ from la.cam_transform import *
 from tracer.tracer_base import TracerBase
 from emitters.abtract_source import LightSource, TaichiSource
 
+from bsdf.bsdfs import BSDF
 from scene.obj_desc import ObjDescriptor
 from scene.xml_parser import mitsuba_parsing
 
@@ -39,10 +40,11 @@ class PathTracer(TracerBase):
         self.cnt        = ti.field(ti.i32, ())
         self.src_num    = len(emitters)
         self.pdf_sum    = ti.field(ti.f32, (self.w, self.h))                # progressive update
-        self.shininess  = ti.field(ti.f32, self.num_objects)
         self.color      = ti.Vector.field(3, ti.f32, (self.w, self.h))      # color without normalization
         self.src_field  = TaichiSource.field()
+        self.bsdf_field = BSDF.field()
         ti.root.dense(ti.i, self.src_num).place(self.src_field)             # Light source Taichi storage
+        ti.root.dense(ti.i, self.num_objects).place(self.bsdf_field)        # BSDF Taichi storage
 
         self.initialze(emitters, objects)
 
@@ -53,8 +55,7 @@ class PathTracer(TracerBase):
                     self.meshes[i, j, k]  = ti.Vector(mesh[k])
                 self.normals[i, j] = ti.Vector(normal) 
             self.mesh_cnt[i]    = obj.tri_num
-            self.shininess[i]   = obj.bsdf.shininess
-            self.surf_color[i]  = ti.Vector(obj.bsdf.reflectance)
+            self.bsdf_field[i]  = obj.bsdf.export()
             self.aabbs[i, 0]    = ti.Matrix(obj.aabb[0])       # unrolled
             self.aabbs[i, 1]    = ti.Matrix(obj.aabb[1])
         for i, emitter in enumerate(emitters):
@@ -67,26 +68,6 @@ class PathTracer(TracerBase):
         """
         idx = ti.random(int) % self.src_num
         return self.src_field[idx], 1. / self.src_num
-
-    @ti.func
-    def sample_ray_dir(self, ctr_dir: vec3, obj_id: int):
-        """
-
-            Sample according to bsdf type. This is a simple implementation. First we just \\
-            consider using shininess to determine sampling function. \\
-            - ctr_dir: new direction vector is sampled around this vector
-            - FIXME: BSDF should be formulated like emitters, declaring their types and parameters
-        """
-        shininess = self.shininess[obj_id]
-        local_new_dir = vec3([0, 0, 0])
-        pdf = 0.0
-        # This part should be upgraded to support more (and sophisticated) BSDF
-        if shininess > 0.5:
-            local_new_dir, pdf = cosine_hemisphere()
-        else:
-            local_new_dir, pdf = uniform_hemisphere()
-        R = rotation_between(vec3([0, 1, 0]), ctr_dir)
-        return (R @ local_new_dir).normalized(), pdf
 
     @ti.kernel
     def render(self):
@@ -104,6 +85,9 @@ class PathTracer(TracerBase):
                 hit_point  = ray_d * min_depth + ray_o
                 emitter, emitter_pdf = self.sample_light()
                 emit_pos, emit_int, emit_pdf = emitter.sample(hit_point)        # sample light
+
+                # direct component computation
+                # FIXME: major revision in Path Tracer
 
                 # TODO: the calculation of half_way vector should be moved into BSDF
                 to_emitter = emit_pos - hit_point
