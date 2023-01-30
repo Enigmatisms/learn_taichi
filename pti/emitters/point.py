@@ -18,7 +18,7 @@ from scene.general_parser import vec3d_parse
 
 class PointSource(LightSource):
     def __init__(self, elem: xet.Element = None):
-        super().__init__(elem, "point")
+        super().__init__(elem)
         pos_elem = elem.find("point")
         assert(pos_elem is not None)
         self.pos: np.ndarray = vec3d_parse(pos_elem)

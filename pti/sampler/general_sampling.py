@@ -38,3 +38,15 @@ def uniform_hemisphere():
     phi = 2. * tm.pi * ti.random(float)
     pdf = 0.5 * pi_inv
     return vec3([tm.cos(phi) * sin_theta, cos_theta, tm.sin(phi) * sin_theta]), pdf
+
+@ti.func
+def sample_triangle(dv1: vec3, dv2: vec3):
+    """
+        Sample on a mesh triangle
+    """
+    u1 = ti.random(float)
+    u2 = ti.random(float)
+    triangle_pt = dv1 * u1 + dv2 * u2
+    if u1 + u2 > 1.0:
+        triangle_pt = dv1 + dv2 - triangle_pt
+    return triangle_pt

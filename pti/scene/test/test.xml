@@ -59,9 +59,9 @@
 		<float name="shininess" value="1.0"/>
 	</bsdf> -->
 
-	<emitter type="rect_area">
+	<emitter type="rect_area" id="rect_area">
 		<rgb name="reflectance" value="15.0, 14.7, 14.5"/>
-		<point name="center" x="2.78" y="5.48700" z="2.795"/>
+		<point name="center" x="2.78" y="5.000" z="2.795"/>
 		<float name="l1" value="1.3"/>
 		<float name="l2" value="1.05"/>
 	</emitter>
@@ -71,12 +71,13 @@
 		<transform name="toWorld">
 			<translate x="0" y="-0.0005" z="0"/>
 		</transform>
-		<ref id="light"/>
+		<ref type="material" id="light"/>
+		<ref type="emitter" id="point"/>
 	</shape> -->
 
 	<shape type="obj">
 		<string name="filename" value="meshes/cbox_floor.obj"/>
-		<ref id="white"/>
+		<ref type="material" id="white"/>
 		<transform name="toWorld">
 			<translate x="0" y="0.0" z="0"/>
 		</transform>
@@ -84,23 +85,23 @@
 
 	<shape type="obj">
 		<string name="filename" value="meshes/cbox_ceiling.obj"/>
-		<ref id="white"/>
+		<ref type="material" id="white"/>
 	</shape>
 
 	<shape type="obj">
 		<string name="filename" value="meshes/cbox_back.obj"/>
-		<ref id="white"/>
+		<ref type="material" id="white"/>
 	</shape>
 
 	<shape type="obj">
 		<string name="filename" value="meshes/cbox_greenwall.obj"/>
-		<ref id="right_wall"/>
+		<ref type="material" id="right_wall"/>
 	</shape>
 
 	<shape type="obj">
 		<string name="filename" value="meshes/cbox_redwall.obj"/>
 
-		<ref id="left_wall"/>
+		<ref type="material" id="left_wall"/>
 	</shape>
 
 	<shape type="obj">
@@ -108,7 +109,7 @@
 		<transform name="toWorld">
 			<rotate type="euler" r="0.0" p="0.0" y="0"/>
 		</transform>
-		<ref id="box"/>
+		<ref type="material" id="box"/>
 	</shape>
 
 	<shape type="obj">
@@ -116,6 +117,6 @@
 		<transform name="toWorld">
 			<rotate type="euler" r="0.0" p="0.0" y="-0"/>
 		</transform>
-		<ref id="large_box"/>
+		<ref type="material" id="large_box"/>
 	</shape>
 </scene>

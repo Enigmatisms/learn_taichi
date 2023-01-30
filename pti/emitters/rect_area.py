@@ -18,7 +18,7 @@ class RectAreaSource(LightSource):
             This is more complex than other light sources
             The problem is how to export different kinds of light source to Taichi
         """
-        super().__init__(elem, "rect_area")
+        super().__init__(elem)
         point_elems = elem.findall("point")
         assert(len(point_elems))
 

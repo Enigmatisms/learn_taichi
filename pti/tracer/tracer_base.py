@@ -43,19 +43,24 @@ class TracerBase:
         self.num_objects = len(objects)
         max_tri_num = max([obj.tri_num for obj in objects])
 
-        self.cam_orient = prop['transform'][0]                              # first field is camera orientation
+        self.cam_orient = prop['transform'][0]                          # first field is camera orientation
         self.cam_orient /= np.linalg.norm(self.cam_orient)
         self.cam_t      = ti.Vector(prop['transform'][1])
         self.cam_r      = ti.Matrix(np_rotation_between(np.float32([0, 0, 1]), self.cam_orient))
         
         self.aabbs      = ti.Vector.field(3, ti.f32, (self.num_objects, 2))
         self.normals    = ti.Vector.field(3, ti.f32)
-        self.meshes     = ti.Vector.field(3, dtype = ti.f32)               # leveraging SSDS, shape (N, mesh_num, 3) - vector3d
-        self.pixels = ti.Vector.field(3, ti.f32, (self.w, self.h))         # output: color
+        self.meshes     = ti.Vector.field(3, ti.f32)                    # leveraging SSDS, shape (N, mesh_num, 3) - vector3d
+        self.precom_vec = ti.Vector.field(3, ti.f32)
+        self.pixels = ti.Vector.field(3, ti.f32, (self.w, self.h))      # output: color
 
-        self.mesh_nodes = ti.root.dense(ti.i, self.num_objects)
-        self.mesh_nodes.bitmasked(ti.j, max_tri_num).dense(ti.k, 3).place(self.meshes)      # for simple shapes, this would be efficient
-        self.mesh_nodes.bitmasked(ti.j, max_tri_num).place(self.normals)
+        self.bitmasked_nodes = ti.root.dense(ti.i, self.num_objects).bitmasked(ti.j, max_tri_num)
+        self.bitmasked_nodes.place(self.normals)
+        self.bitmasked_nodes.dense(ti.k, 3).place(self.meshes)      # for simple shapes, this would be efficient
+        # triangle has 3 vertices, v1, v2, v3. precom_vec stores (v2 - v1), (v3 - v1)
+        # These two precom(puted) vectors can be used in ray intersection and triangle sampling (for shape-attached emitters)
+        self.bitmasked_nodes.dense(ti.k, 2).place(self.precom_vec)
+
         self.mesh_cnt   = ti.field(ti.i32, self.num_objects)
 
     def __repr__(self):
@@ -115,8 +120,8 @@ class TracerBase:
                 if tm.dot(ray, normal) >= 0.0: continue     # back-face culling
                 # Sadly, Taichi does not support slicing. I think this restrict the use cases of Matrix field
                 p1 = self.meshes[aabb_idx, mesh_idx, 0]
-                vec1 = self.meshes[aabb_idx, mesh_idx, 1] - p1
-                vec2 = self.meshes[aabb_idx, mesh_idx, 2] - p1
+                vec1 = self.precom_vec[aabb_idx, mesh_idx, 0]
+                vec2 = self.precom_vec[aabb_idx, mesh_idx, 1]
                 mat = ti.Matrix.cols([vec1, vec2, -ray]).inverse()
                 u, v, t = mat @ (start_p - p1)
                 if u >= 0 and v >= 0 and u + v <= 1.0:
@@ -145,8 +150,8 @@ class TracerBase:
             tri_num = self.mesh_cnt[aabb_idx]
             for mesh_idx in range(tri_num):
                 p1 = self.meshes[aabb_idx, mesh_idx, 0]
-                vec1 = self.meshes[aabb_idx, mesh_idx, 1] - p1
-                vec2 = self.meshes[aabb_idx, mesh_idx, 2] - p1
+                vec1 = self.precom_vec[aabb_idx, mesh_idx, 0]
+                vec2 = self.precom_vec[aabb_idx, mesh_idx, 1]
                 mat = ti.Matrix.cols([vec1, vec2, -ray]).inverse()
                 u, v, t = mat @ (start_p - p1)
                 if u >= 0 and v >= 0 and u + v <= 1.0:

@@ -33,7 +33,7 @@ class BSDF_np:
     __all_glossiness_name   = {"glossiness", "shininess", "k_g"}
     __all_specular_name     = {"specular", "k_s"}
     __all_absorption_name   = {"absorptions", "k_a"}
-    __type_mapping          = {"blinn-phong": 0, "lambertain": 1, "specular": 2}
+    __type_mapping          = {"blinn-phong": 0, "lambertian": 1, "specular": 2}
     
     def __init__(self, elem: xet.Element):
         self.type: str = elem.get("type")
@@ -129,25 +129,25 @@ class BSDF:
     # ======================= Mirror-Specular ========================
     @ti.func
     def eval_specular(self, incid: vec3, ray_out: vec3, normal: vec3):
-        raise NotImplementedError("Please, expect me.")
+        return vec3([1, 1, 1])
 
     @ti.func
     def sample_specular(self, incid: vec3, normal: vec3):
-        raise NotImplementedError("Please, expect me.")
+        return vec3([0, 1, 0]), vec3([1, 1, 1]), 1.0 
 
     # ================================================================
 
     @ti.func
-    def eval(self, incid: vec3, normal: vec3) -> vec3:
+    def eval(self, incid: vec3, out: vec3, normal: vec3) -> vec3:
         ret_spec = vec3([1, 1, 1])
         if self._type == 0:         # Blinn-Phong
-            ret_spec = self.eval_blinn_phong(incid, normal)
+            ret_spec = self.eval_blinn_phong(incid, out, normal)
         elif self._type == 1:       # Lambertian
-            ret_spec = self.eval_lambertian(incid, normal)
+            ret_spec = self.eval_lambertian(out, normal)
         elif self._type == 2:       # Specular
-            ret_spec = self.eval_specular(incid, normal)
+            ret_spec = self.eval_specular(incid, out, normal)
         else:
-            raise NotImplementedError(f"Unknown BSDF type: {self._type} during evaluation.")
+            print(f"Warnning: unknown or unsupported BSDF type: {self._type} during evaluation.")
         return ret_spec
 
     @ti.func
@@ -162,9 +162,9 @@ class BSDF:
         if self._type == 0:         # Blinn-Phong
             ret_dir, ret_spec, pdf = self.sample_blinn_phong(incid, normal)
         elif self._type == 1:       # Lambertian
-            ret_dir, ret_spec, pdf = self.sample_lambertian(incid, normal)
+            ret_dir, ret_spec, pdf = self.sample_lambertian(normal)
         elif self._type == 2:       # Specular
             ret_dir, ret_spec, pdf = self.sample_specular(incid, normal)
         else:
-            raise NotImplementedError(f"Unknown BSDF type: {self._type} during sampling.")
+            print(f"Warnning: unknown or unsupported BSDF type: {self._type} during evaluation.")
         return ret_dir, ret_spec, pdf

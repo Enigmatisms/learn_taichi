@@ -21,7 +21,7 @@ def get_aabb(meshes: Arr) -> Arr:
     return np.float32((mini, maxi))
 
 class ObjDescriptor:
-    def __init__(self, meshes, normals, bsdf, R = None, t = None):
+    def __init__(self, meshes, normals, bsdf, R = None, t = None, emit_id = -1):
         """
             Inputs are objects on which transformations have been applied already
         """
@@ -30,8 +30,9 @@ class ObjDescriptor:
         self.normals = normals
         self.R = R
         self.t = t
-        self.aabb = get_aabb(meshes)        # of shape (2, 3)
         self.bsdf = bsdf
+        self.aabb = get_aabb(meshes)        # of shape (2, 3)
+        self.emitter_ref_id = emit_id
 
     def __repr__(self):
         centroid = (self.aabb[0] + self.aabb[1]) / 2

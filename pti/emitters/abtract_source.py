@@ -65,18 +65,30 @@ class TaichiSource:
                 ret_int *= (self.distance_attenuate(ret_pos - hit_pos) * dot_light)
         return ret_pos, ret_int, ret_pdf
 
+    @ti.func
+    def eval_le(self, inci_dir: vec3):
+        """
+            Emission evaluation, incid_dir is not normalized
+        """
+        ret_int = self.intensity
+        if self._type == 1:
+            if ti.math.dot(inci_dir, self.dirv) > 0:
+                ret_int.fill(0.0)
+        return ret_int
+
 class LightSource:
     """
         Sampling function is implemented in Taichi source. Currently:
         Point / Area / Spot / Directional are to be supported
     """
-    def __init__(self, base_elem: xet.Element = None, _type: str = "point"):
+    def __init__(self, base_elem: xet.Element = None):
         if base_elem is not None:
             self.intensity = rgb_parse(base_elem.find("rgb"))
         else:
             print("Warning: default intializer should only be used in testing.")
             self.intensity = np.ones(3, np.float32)
-        self.type: str = _type
+        self.type: str = base_elem.get("type")
+        self.id:   str = base_elem.get("id")
 
     def export(self) -> TaichiSource:
         """

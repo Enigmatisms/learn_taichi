@@ -40,17 +40,25 @@ def parse_emitters(em_elem: list):
         only [Point], [Area], [Directional] are supported
     """
     sources = []
+    source_id_dict = dict()
     for elem in em_elem:
         emitter_type = elem.get("type")
+        source = None
         if emitter_type == "point":
-            sources.append(PointSource(elem))
+            source = PointSource(elem)
+            sources.append()
         elif emitter_type == "rect_area":
-            sources.append(RectAreaSource(elem))
+            source = RectAreaSource(elem)
         elif emitter_type == "directional":
-            sources.append(DirectionalSource(elem))
-    return sources
+            source = DirectionalSource(elem)
+        if source is not None:
+            if source.id in source_id_dict:
+                raise ValueError(f"Two sources with same id {source.id} will result in conflicts")
+            source_id_dict[source.id] = len(sources)
+            sources.append(source)
+    return sources, source_id_dict
 
-def parse_wavefront(directory: str, obj_list: List[xet.Element], bsdf_dict: dict) -> List[Arr]:
+def parse_wavefront(directory: str, obj_list: List[xet.Element], bsdf_dict: dict, emitter_dict: dict) -> List[Arr]:
     """
         Parsing wavefront obj file (filename) from list of xml nodes    
     """
@@ -58,17 +66,24 @@ def parse_wavefront(directory: str, obj_list: List[xet.Element], bsdf_dict: dict
     for elem in obj_list:
         trans_r, trans_t = None, None                           # transform
         filepath_child      = elem.find("string")
-        ref_child           = elem.find("ref")        
         meshes, normals     = load_obj_file(os.path.join(directory, filepath_child.get("value")))
         transform_child     = elem.find("transform")
         if transform_child is not None:
             trans_r, trans_t    = transform_parse(transform_child)
             meshes, normals     = apply_transform(meshes, normals, trans_r, trans_t)
         # AABB calculation should be done after transformation
-        if ref_child is None:
+        ref_childs           = elem.findall("ref")        
+        bsdf_item = None
+        emitter_ref_id = -1
+        for ref_child in ref_childs:
+            ref_type = ref_child.get("type")
+            if ref_type == "material":
+                bsdf_item = bsdf_dict[ref_child.get("id")]
+            elif ref_type == "emitter":
+                emitter_ref_id = emitter_dict[ref_child.get("id")]
+        if bsdf_item is None:
             raise ValueError("Object should be attached with a BSDF for now since no default one implemented yet.")
-        bsdf_item = bsdf_dict[ref_child.get("id")]
-        all_objs.append(ObjDescriptor(meshes, normals, bsdf_item, trans_r, trans_t))
+        all_objs.append(ObjDescriptor(meshes, normals, bsdf_item, trans_r, trans_t, emit_id = emitter_ref_id))
     return all_objs
 
 def parse_bsdf(bsdf_list: List[xet.Element]):
@@ -120,9 +135,10 @@ def mitsuba_parsing(directory: str, file: str):
     shape_nodes     = root_node.findall("shape")
     sensor_node     = root_node.find("sensor")
     assert(sensor_node)
-    emitter_configs = parse_emitters(emitter_nodes)
+    emitter_configs, \
+    emitter_dict    = parse_emitters(emitter_nodes)
     bsdf_dict       = parse_bsdf(bsdf_nodes)
-    meshes          = parse_wavefront(directory, shape_nodes, bsdf_dict)
+    meshes          = parse_wavefront(directory, shape_nodes, bsdf_dict, emitter_dict)
     configs         = parse_global_sensor(sensor_node)
     return emitter_configs, bsdf_dict, meshes, configs
 

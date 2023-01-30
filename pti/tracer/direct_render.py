@@ -46,6 +46,8 @@ class BlinnPhongTracer(TracerBase):
             for j, (mesh, normal) in enumerate(zip(obj.meshes, obj.normals)):
                 for k in range(3):
                     self.meshes[i, j, k]  = ti.Vector(mesh[k])
+                self.precom_vec[i, j, 0] = self.meshes[i, j, 1] - self.meshes[i, j, 0]                    
+                self.precom_vec[i, j, 1] = self.meshes[i, j, 2] - self.meshes[i, j, 0]                    
                 self.normals[i, j] = ti.Vector(normal) 
             self.mesh_cnt[i]    = obj.tri_num
             self.shininess[i]   = obj.bsdf.k_g

@@ -13,7 +13,7 @@ from scene.general_parser import vec3d_parse
 
 class DirectionalSource(LightSource):
     def __init__(self, elem: xet.Element):
-        super().__init__(elem, "directional")
+        super().__init__(elem)
         dir_elem = elem.find("point")
         assert(dir_elem)
         self.direction = vec3d_parse(dir_elem)
