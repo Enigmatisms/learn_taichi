@@ -107,7 +107,8 @@ class PathTracer(TracerBase):
                 emitter, emitter_pdf, emitter_valid = self.sample_light(hit_light)
                 # direct / emission component evaluation
                 if emitter_valid:
-                    emit_pos, direct_int, direct_pdf = emitter.sample(hit_point)        # sample light
+                    emit_pos, direct_int, direct_pdf = emitter.         \
+                        sample(self.meshes, self.normals, self.mesh_cnt, hit_light, hit_point)        # sample light
                     to_emitter = emit_pos - hit_point
                     emitter_d  = to_emitter.norm()
                     light_dir  = to_emitter / emitter_d
@@ -135,7 +136,7 @@ class PathTracer(TracerBase):
 
 if __name__ == "__main__":
     profiling = False
-    ti.init(arch = ti.cpu, kernel_profiler = profiling, default_ip = ti.i32, default_fp = ti.f32)
+    ti.init(arch = ti.gpu, kernel_profiler = profiling, default_ip = ti.i32, default_fp = ti.f32)
     emitter_configs, _, meshes, configs = mitsuba_parsing("../scene/test/", "test.xml")
     pt = PathTracer(emitter_configs, meshes, configs)
     gui = ti.GUI('Path Tracing', (pt.w, pt.h))

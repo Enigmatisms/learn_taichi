@@ -9,7 +9,7 @@
 		<float name="far_clip" value="2000"/>
 		<float name="fov" value="39.3077"/>
         <integer name="sample_count" value="128"/>
-        <integer name="max_bounce" value="10"/>
+        <integer name="max_bounce" value="12"/>
         <boolean name="use_rr" value="false"/>			<!-- Whether to use Russian roulette ray termination -->
         <boolean name="anti_alias" value="true"/>       <!-- Only useful in progressive path tracer -->
 
@@ -54,26 +54,27 @@
 		<rgb name="k_s" value="0.0"/>
 	</bsdf>
 
-	<!-- <bsdf type="blinn-phong" id="light">
-		<rgb name="reflectance" value="#FFFFFF"/>
-		<float name="shininess" value="1.0"/>
-	</bsdf> -->
+	<bsdf type="blinn-phong" id="light">
+		<rgb name="reflectance" value="#555555"/>
+		<rgb name="k_g" value="1.0"/>
+		<rgb name="k_s" value="0.0"/>
+	</bsdf>
 
 	<emitter type="rect_area" id="rect_area">
-		<rgb name="reflectance" value="15.0, 14.7, 14.5"/>
-		<point name="center" x="2.78" y="5.000" z="2.795"/>
+		<rgb name="reflectance" value="25.0, 24.7, 24.5"/>
+		<!-- <point name="center" x="2.78" y="5.487" z="2.795"/>
 		<float name="l1" value="1.3"/>
-		<float name="l2" value="1.05"/>
+		<float name="l2" value="1.05"/> -->
 	</emitter>
 
-	<!-- <shape type="obj">
+	<shape type="obj">
 		<string name="filename" value="meshes/cbox_luminaire.obj"/>
 		<transform name="toWorld">
-			<translate x="0" y="-0.0005" z="0"/>
+			<translate x="0" y="-0.001" z="0"/>
 		</transform>
 		<ref type="material" id="light"/>
-		<ref type="emitter" id="point"/>
-	</shape> -->
+		<ref type="emitter" id="rect_area"/>
+	</shape>
 
 	<shape type="obj">
 		<string name="filename" value="meshes/cbox_floor.obj"/>

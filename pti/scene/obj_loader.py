@@ -3,7 +3,7 @@
     @author Qianyue He
     @date 2023.1.19
 """
-__all__ = ['load_obj_file', 'apply_transform']
+__all__ = ['load_obj_file', 'apply_transform', 'calculate_surface_area']
 
 import numpy as np
 import pywavefront as pwf
@@ -38,6 +38,14 @@ def load_obj_file(path: str, precomp_normal = True, verbose = False):
     if verbose:
         print(f"Mesh loaded from {path}, output shape: {mesh_faces.shape}. Normal output: {precomp_normal}")
     return mesh_faces, normals
+
+def calculate_surface_area(meshes: Arr):
+    area_sum = 0.
+    for face in meshes:
+        dv1 = face[1] - face[0]
+        dv2 = face[2] - face[0]
+        area_sum += np.linalg.norm(np.cross(dv1, dv2)) / 2.
+    return area_sum
 
 def apply_transform(meshes: Arr, normals: Arr, trans_r: Arr, trans_t: Arr) -> Arr:
     """

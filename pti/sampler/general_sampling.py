@@ -9,7 +9,7 @@ import taichi as ti
 import taichi.math as tm
 from taichi.math import vec3
 
-__all__ = ['cosine_hemisphere', 'uniform_hemisphere']
+__all__ = ['cosine_hemisphere', 'uniform_hemisphere', 'sample_triangle']
 
 pi_inv = 1. / tm.pi
 

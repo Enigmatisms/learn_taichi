@@ -19,7 +19,7 @@ from bsdf.bsdfs import BSDF_np
 
 from scene.obj_loader import *
 from scene.obj_desc import ObjDescriptor
-from scene.general_parser import get, transform_parse, rgb_parse
+from scene.general_parser import get, transform_parse
 
 # import emitters
 from emitters.point import PointSource
@@ -34,6 +34,16 @@ __MAPPING__ = {"integer": int, "float": float, "string": str, "boolean": lambda 
     level 1    AABB1 (tri1 tri2 tri3)     AABB2 (tri4 tri5 tri6)     AABB3 (tri4 tri5 tri6)
 """
 
+def update_emitter_config(emitter_config: List, area_lut: dict):
+    for i, emitter in enumerate(emitter_config):
+        if i in area_lut:
+            emitter.inv_area = 1. / area_lut[i]
+            emitter.attached = True
+        else:
+            if emitter.type == "rect_area":
+                emitter.inv_area = 1. / (emitter.l1 * emitter.l2)
+    return emitter_config
+
 def parse_emitters(em_elem: list):
     """
         Parsing scene emitters from list of xml nodes \\
@@ -46,7 +56,6 @@ def parse_emitters(em_elem: list):
         source = None
         if emitter_type == "point":
             source = PointSource(elem)
-            sources.append()
         elif emitter_type == "rect_area":
             source = RectAreaSource(elem)
         elif emitter_type == "directional":
@@ -63,6 +72,9 @@ def parse_wavefront(directory: str, obj_list: List[xet.Element], bsdf_dict: dict
         Parsing wavefront obj file (filename) from list of xml nodes    
     """
     all_objs = []
+    # Some emitters will be attached to objects, to sample the object-attached emitters
+    # We need to calculate surface area of the object mesh first (asuming each triangle has similar area)
+    attached_area_dict = {}
     for elem in obj_list:
         trans_r, trans_t = None, None                           # transform
         filepath_child      = elem.find("string")
@@ -81,10 +93,11 @@ def parse_wavefront(directory: str, obj_list: List[xet.Element], bsdf_dict: dict
                 bsdf_item = bsdf_dict[ref_child.get("id")]
             elif ref_type == "emitter":
                 emitter_ref_id = emitter_dict[ref_child.get("id")]
+                attached_area_dict[emitter_ref_id] = calculate_surface_area(meshes)
         if bsdf_item is None:
             raise ValueError("Object should be attached with a BSDF for now since no default one implemented yet.")
         all_objs.append(ObjDescriptor(meshes, normals, bsdf_item, trans_r, trans_t, emit_id = emitter_ref_id))
-    return all_objs
+    return all_objs, attached_area_dict
 
 def parse_bsdf(bsdf_list: List[xet.Element]):
     """
@@ -130,16 +143,17 @@ def mitsuba_parsing(directory: str, file: str):
     if not version_tag == "1.0":
         raise ValueError(f"Unsupported version {version_tag}. Only '1.0' is supported right now.")  
     # Export list of dict for emitters / dict for other secen settings and film settings / list for obj files
-    emitter_nodes   = root_node.findall("emitter")
-    bsdf_nodes      = root_node.findall("bsdf")
-    shape_nodes     = root_node.findall("shape")
-    sensor_node     = root_node.find("sensor")
+    emitter_nodes    = root_node.findall("emitter")
+    bsdf_nodes       = root_node.findall("bsdf")
+    shape_nodes      = root_node.findall("shape")
+    sensor_node      = root_node.find("sensor")
     assert(sensor_node)
     emitter_configs, \
-    emitter_dict    = parse_emitters(emitter_nodes)
-    bsdf_dict       = parse_bsdf(bsdf_nodes)
-    meshes          = parse_wavefront(directory, shape_nodes, bsdf_dict, emitter_dict)
-    configs         = parse_global_sensor(sensor_node)
+    emitter_dict     = parse_emitters(emitter_nodes)
+    bsdf_dict        = parse_bsdf(bsdf_nodes)
+    meshes, area_lut = parse_wavefront(directory, shape_nodes, bsdf_dict, emitter_dict)
+    configs          = parse_global_sensor(sensor_node)
+    emitter_configs  = update_emitter_config(emitter_configs, area_lut)
     return emitter_configs, bsdf_dict, meshes, configs
 
 if __name__ == "__main__":

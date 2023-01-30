@@ -23,6 +23,5 @@ class PointSource(LightSource):
         assert(pos_elem is not None)
         self.pos: np.ndarray = vec3d_parse(pos_elem)
 
-
     def export(self) -> TaichiSource:
         return TaichiSource(_type = 0, intensity = vec3(self.intensity), pos = vec3(self.pos))

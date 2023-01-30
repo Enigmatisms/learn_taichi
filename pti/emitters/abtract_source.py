@@ -9,11 +9,12 @@ import sys
 sys.path.append("..")
 
 import numpy as np
-import xml.etree.ElementTree as xet
-from scene.general_parser import rgb_parse
-
 import taichi as ti
+import xml.etree.ElementTree as xet
 from taichi.math import vec3
+
+from scene.general_parser import rgb_parse
+from sampler.general_sampling import sample_triangle
 
 @ti.dataclass
 class TaichiSource:
@@ -32,13 +33,17 @@ class TaichiSource:
     base_2:     vec3
     l1:         ti.f32
     l2:         ti.f32
+    inv_area:   ti.f32      # inverse area (for non-point emitters, like rect-area or mesh attached emitters)
 
     @ti.func
     def distance_attenuate(self, x: vec3):
         return ti.min(1.0 / (1e-5 + x.norm_sqr()), 1e5)
 
     @ti.func
-    def sample(self, hit_pos: vec3):
+    def sample(
+        self, dvs: ti.template(), normals: ti.template(), 
+        mesh_cnt: ti.template(), idx: ti.i32, hit_pos: vec3
+    ):
         """
             A unified sampling function, choose sampling strategy according to _type \\
             input ray hit point \\
@@ -50,26 +55,36 @@ class TaichiSource:
         if self._type == 0:     # point source
             ret_int *= self.distance_attenuate(hit_pos - ret_pos)
         elif self._type == 1:   # area source
-            ret_pdf = 1. / (self.l1 * self.l2)
-            dot_light = ti.math.dot(hit_pos - self.pos, self.dirv)
+            ret_pdf     = self.inv_area
+            dot_light   = 1.0
+            diff        = vec3([0, 0, 0])
+            if idx >= 0:   # sample from mesh
+                mesh_num = mesh_cnt[idx]
+                tri_id      = ti.random(ti.i32) % mesh_num       # ASSUME that triangles are similar in terms of area
+                normal      = normals[idx, tri_id]
+                dv1         = dvs[idx, tri_id, 0]
+                dv2         = dvs[idx, tri_id, 1]
+                ret_pos     = sample_triangle(dv1, dv2)
+                diff        = hit_pos - ret_pos
+                dot_light   = ti.math.dot(diff, normal)
+            else:               # sample from pre-defined basis plane
+                rand_axis1  = ti.random(float) - 0.5
+                rand_axis2  = ti.random(float) - 0.5
+                v_axis1     = self.base_1 * self.l1 * rand_axis1
+                v_axis2     = self.base_2 * self.l2 * rand_axis2
+                ret_pos    += (v_axis1 + v_axis2)
+                diff        = hit_pos - ret_pos
+                dot_light   = ti.math.dot(diff, self.dirv)
             if dot_light <= 0.0:
                 ret_int = vec3([0, 0, 0])
                 ret_pdf = 1.0
             else:
-                rand_axis1 = ti.random(float) - 0.5
-                rand_axis2 = ti.random(float) - 0.5
-
-                v_axis1 = self.base_1 * self.l1 * rand_axis1
-                v_axis2 = self.base_2 * self.l2 * rand_axis2
-                ret_pos += (v_axis1 + v_axis2)
-                ret_int *= (self.distance_attenuate(ret_pos - hit_pos) * dot_light)
+                ret_int *= (self.distance_attenuate(diff) * dot_light)
         return ret_pos, ret_int, ret_pdf
 
     @ti.func
     def eval_le(self, inci_dir: vec3):
-        """
-            Emission evaluation, incid_dir is not normalized
-        """
+        """ Emission evaluation, incid_dir is not normalized """
         ret_int = self.intensity
         if self._type == 1:
             if ti.math.dot(inci_dir, self.dirv) > 0:
@@ -89,6 +104,8 @@ class LightSource:
             self.intensity = np.ones(3, np.float32)
         self.type: str = base_elem.get("type")
         self.id:   str = base_elem.get("id")
+        self.inv_area  = 1.0        # inverse area (for non-point emitters, like rect-area or mesh attached emitters)
+        self.attached  = False      # Indicated whether the light source is attached to an object (if True, new sampling strategy should be used)
 
     def export(self) -> TaichiSource:
         """
@@ -97,4 +114,4 @@ class LightSource:
         raise NotImplementedError("Can not call virtual method to be overridden.")
 
     def __repr__(self):
-        return f"<{self.type.capitalize()} light source. Intensity: {self.intensity}>"
+        return f"<{self.type.capitalize()} light source. Intensity: {self.intensity}. Area: {1. / self.inv_area:.5f}. Attached = {self.attached}>"
