@@ -62,6 +62,7 @@ class TracerBase:
         self.bitmasked_nodes.dense(ti.k, 2).place(self.precom_vec)
 
         self.mesh_cnt   = ti.field(ti.i32, self.num_objects)
+        self.cnt        = ti.field(ti.i32, ())                          # useful in path tracer (sample counter)
 
     def __repr__(self):
         """
@@ -73,17 +74,24 @@ class TracerBase:
         pass
 
     @ti.func
-    def pix2ray(self, i, j, anti_alias):
+    def pix2ray(self, i, j):
         """
             Convert pixel coordinate to ray direction
+            - anti_alias: whether to use pixel sample jittering for anti-aliasing
+            - str_sample: whether to use stratified sampling 
         """
         pi = float(i)
         pj = float(j)
         vx = 0.5
         vy = 0.5
-        if anti_alias:
-            vx = ti.random(float) * __inv_eps__ + __eps__
-            vy = ti.random(float) * __inv_eps__ + __eps__
+        if ti.static(self.anti_alias):
+            if ti.static(self.stratified_sample): # sequential stratified sampling
+                mod_val = self.cnt[None] % 16
+                vx = float(mod_val % 4)   * 0.25 + ti.random(float) * 0.25
+                vy = float(mod_val // 4) * 0.25 + ti.random(float) * 0.25
+            else:    # uniform sampling
+                vx = ti.random(float) * __inv_eps__ + __eps__
+                vy = ti.random(float) * __inv_eps__ + __eps__
         cam_dir = vec3([(self.half_w + vx - pi) * self.inv_focal, (pj - self.half_h + vy) * self.inv_focal, 1.])
         return (self.cam_r @ cam_dir).normalized()
 

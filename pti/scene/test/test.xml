@@ -9,10 +9,13 @@
 		<float name="far_clip" value="2000"/>
 		<float name="fov" value="39.3077"/>
         <integer name="sample_count" value="128"/>
-        <integer name="max_bounce" value="12"/>
-        <boolean name="use_rr" value="false"/>			<!-- Whether to use Russian roulette ray termination -->
-        <boolean name="anti_alias" value="true"/>       <!-- Only useful in progressive path tracer -->
+        <integer name="max_bounce" value="16"/>
+        <integer name="num_shadow_ray" value="4"/>       
 
+        <boolean name="use_rr" value="false"/>				<!-- Whether to use Russian roulette ray termination -->
+        <boolean name="anti_alias" value="true"/>       	
+        <boolean name="stratified_sampling" value="true"/>	<!-- TODO: stratified sampling only implemented for pixel sampling -->
+		
 		<transform name="toWorld">
 			<lookat target="2.78, 2.73, -7.99" origin="2.78, 2.73, -8.00" up="0, 1, 0"/>
 		</transform>
@@ -66,6 +69,11 @@
 		<float name="l1" value="1.3"/>
 		<float name="l2" value="1.05"/> -->
 	</emitter>
+
+	<!-- <emitter type="point" id="point">
+		<rgb name="reflectance" value="10.0, 8.7, 8.5"/>
+		<point name="center" x="4.0" y="0.5" z="0.5"/>
+	</emitter> -->
 
 	<shape type="obj">
 		<string name="filename" value="meshes/cbox_luminaire.obj"/>

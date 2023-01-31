@@ -58,7 +58,7 @@ class BlinnPhongTracer(TracerBase):
     @ti.kernel
     def render(self, emit_pos: vec3):
         for i, j in self.pixels:
-            ray = self.pix2ray(i, j, False)
+            ray = self.pix2ray(i, j)
             obj_id, tri_id, min_depth = self.ray_intersect(ray, self.cam_t)
             # Iterate through all the meshes and find the minimum depth
             if obj_id >= 0:

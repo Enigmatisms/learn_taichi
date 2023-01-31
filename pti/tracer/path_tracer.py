@@ -24,6 +24,13 @@ from scene.xml_parser import mitsuba_parsing
 
 from sampler.general_sampling import *
 
+"""
+FIXME: maybe there is something wrong with (Next Event Estimation step)
+Cite: 'This means we need to keep track of the type of the previous
+vertex during the random walk.'
+Try more variance reduction method (MIS)
+"""
+
 @ti.data_oriented
 class PathTracer(TracerBase):
     """
@@ -35,9 +42,12 @@ class PathTracer(TracerBase):
         """
             Implement path tracing algorithms first, then we can improve light source / BSDF / participating media
         """
-        self.anti_alias = prop['anti_alias']
+        self.anti_alias         = prop['anti_alias']
+        self.stratified_sample  = prop['stratified_sampling']   # whether to use stratified sampling
+        self.num_shadow_ray     = prop['num_shadow_ray']        # number of shadow samples to trace
+        assert(self.num_shadow_ray >= 1)
+        self.inv_num_shadow_ray = 1. / float(self.num_shadow_ray)
 
-        self.cnt        = ti.field(ti.i32, ())
         # for object with attached light source, emitter id stores the reference id to the emitter
         self.emitter_id = ti.field(ti.i32, self.num_objects)   
                      
@@ -88,36 +98,53 @@ class PathTracer(TracerBase):
     def render(self):
         self.cnt[None] += 1
         for i, j in self.pixels:
-            ray_d = self.pix2ray(i, j, self.anti_alias)
+            ray_d = self.pix2ray(i, j)
             ray_o = self.cam_t
             obj_id, tri_id, min_depth = self.ray_intersect(ray_d, ray_o)
             color           = vec3([0, 0, 0])
-            direct_int      = vec3([0, 0, 0])
             contribution    = vec3([1, 1, 1])
-            for _ in range(self.max_bounce):
+            for _i in range(self.max_bounce):
                 if obj_id < 0: break                    # nothing is hit, break
-                if contribution.max() < 1e-4: break     # contribution too small, break
+                if ti.static(self.use_rr):
+                    # Simple Russian Roullete ray termination
+                    max_value = ti.max(contribution)
+                    if ti.random(float) > max_value: break
+                    else: contribution *= 1. / max_value    # unbiased calculation
+                else:
+                    if contribution.max() < 1e-4: break     # contribution too small, break
                 normal = self.normals[obj_id, tri_id]
                 hit_point   = ray_d * min_depth + ray_o
                 hit_light   = self.emitter_id[obj_id]   # id for hit emitter, if nothing is hit, this value will be -1
 
                 direct_pdf  = 1.0
+                emitter_pdf = 1.0
+                break_flag  = False
                 emit_int    = vec3([0, 0, 0])
+                shadow_int  = vec3([0, 0, 0])
+                direct_int  = vec3([0, 0, 0])
                 direct_spec = vec3([1, 1, 1])
-                emitter, emitter_pdf, emitter_valid = self.sample_light(hit_light)
-                # direct / emission component evaluation
-                if emitter_valid:
-                    emit_pos, direct_int, direct_pdf = emitter.         \
-                        sample(self.meshes, self.normals, self.mesh_cnt, hit_light, hit_point)        # sample light
-                    to_emitter = emit_pos - hit_point
-                    emitter_d  = to_emitter.norm()
-                    light_dir  = to_emitter / emitter_d
-                    direct_spec = self.bsdf_field[obj_id].eval(ray_d, light_dir, normal)
-                    # TODO: extend to multiple shadow rays, since shadow rays are easy to trace
-                    if self.does_intersect(light_dir, hit_point, emitter_d):        # shadow ray 
-                        direct_int.fill(0.0)
-                else:       # the only situation for being invalid, is when there is only one source and the ray hit the source
-                    direct_int.fill(0.0)                # direct reflect is 0, pdf
+                for _j in range(self.num_shadow_ray):    # more shadow ray samples
+                    emitter, emitter_pdf, emitter_valid = self.sample_light(hit_light)
+                    # direct / emission component evaluation
+                    if emitter_valid:
+                        emit_pos, shadow_int, direct_pdf = emitter.         \
+                            sample(self.precom_vec, self.normals, self.mesh_cnt, hit_light, hit_point)        # sample light
+                        to_emitter  = emit_pos - hit_point
+                        emitter_d   = to_emitter.norm()
+                        light_dir   = to_emitter / emitter_d
+                        direct_spec = self.bsdf_field[obj_id].eval(ray_d, light_dir, normal)
+                        # TODO: extend to multiple shadow rays, since shadow rays are easy to trace
+                        if self.does_intersect(light_dir, hit_point, emitter_d):        # shadow ray 
+                            shadow_int.fill(0.0)
+                    else:       # the only situation for being invalid, is when there is only one source and the ray hit the source
+                        break_flag = True
+                        direct_pdf = 1.0
+                        shadow_int.fill(0.0)                # direct reflect is 0, pdf
+                    direct_int += direct_spec * shadow_int / (emitter_pdf * direct_pdf)
+                    if break_flag:      # only in the situation where there is only one hittable area source
+                        break
+                if not break_flag:
+                    direct_int *= self.inv_num_shadow_ray
 
                 if hit_light >= 0:
                     emit_int = self.src_field[hit_light].eval_le(hit_point - ray_o)
@@ -126,7 +153,6 @@ class PathTracer(TracerBase):
                 ray_d, indirect_spec, ray_pdf = self.bsdf_field[obj_id].sample_new_ray(ray_d, normal)
                 ray_o = hit_point
                 color += (direct_spec * direct_int / (emitter_pdf * direct_pdf) + emit_int) * contribution
-
                 # VERY IMPORTANT: rendering should be done according to rendering equation (approximation)
                 contribution *= indirect_spec / ray_pdf
                 obj_id, tri_id, min_depth = self.ray_intersect(ray_d, ray_o)
@@ -136,7 +162,7 @@ class PathTracer(TracerBase):
 
 if __name__ == "__main__":
     profiling = False
-    ti.init(arch = ti.gpu, kernel_profiler = profiling, default_ip = ti.i32, default_fp = ti.f32)
+    ti.init(arch = ti.vulkan, kernel_profiler = profiling, default_ip = ti.i32, default_fp = ti.f32)
     emitter_configs, _, meshes, configs = mitsuba_parsing("../scene/test/", "test.xml")
     pt = PathTracer(emitter_configs, meshes, configs)
     gui = ti.GUI('Path Tracing', (pt.w, pt.h))
@@ -154,4 +180,4 @@ if __name__ == "__main__":
     if profiling:
         ti.profiler.print_kernel_profiler_info() 
     pixels = pt.pixels.to_numpy()
-    ti.tools.imwrite(pixels, "./path-tracing.png")
+    ti.tools.imwrite(pixels, "./outputs/path-tracing.png")
