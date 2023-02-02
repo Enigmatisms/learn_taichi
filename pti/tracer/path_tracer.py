@@ -25,10 +25,9 @@ from scene.xml_parser import mitsuba_parsing
 from sampler.general_sampling import *
 
 """
-FIXME: maybe there is something wrong with (Next Event Estimation step)
-Cite: 'This means we need to keep track of the type of the previous
-vertex during the random walk.'
-Try more variance reduction method (MIS)
+2.2 Task: understand multi-importance sampling method
+- BSDF / light sampling for direct component evaluation
+- Emitter weight MIS for emitter intersection 
 """
 
 @ti.data_oriented
@@ -133,7 +132,6 @@ class PathTracer(TracerBase):
                         emitter_d   = to_emitter.norm()
                         light_dir   = to_emitter / emitter_d
                         direct_spec = self.bsdf_field[obj_id].eval(ray_d, light_dir, normal)
-                        # TODO: extend to multiple shadow rays, since shadow rays are easy to trace
                         if self.does_intersect(light_dir, hit_point, emitter_d):        # shadow ray 
                             shadow_int.fill(0.0)
                     else:       # the only situation for being invalid, is when there is only one source and the ray hit the source

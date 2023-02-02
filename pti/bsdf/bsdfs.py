@@ -78,6 +78,7 @@ class BSDF_np:
 class BSDF:
     """
         Taichi exported struct for unified BSDF storage
+        FIXME: add a flag to indicate whether the BSDF is Dirac delta (for MIS)
     """
     _type:      ti.i32
     k_d:        vec3            # diffusive coefficient (albedo)
@@ -168,3 +169,9 @@ class BSDF:
         else:
             print(f"Warnning: unknown or unsupported BSDF type: {self._type} during evaluation.")
         return ret_dir, ret_spec, pdf
+
+    @ti.func
+    def get_pdf(self, outdir: vec3, normal: vec3, incid: vec3):
+        """ Some PDF has nothing to do with backward incid (from eye to the surface), like diffusive """
+        if self._type == 0:
+            pass

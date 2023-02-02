@@ -50,3 +50,10 @@ def sample_triangle(dv1: vec3, dv2: vec3):
     if u1 + u2 > 1.0:
         triangle_pt = dv1 + dv2 - triangle_pt
     return triangle_pt
+
+@ti.func
+def mis_weight(pdf_a: ti.f32, pdf_b: ti.f32):
+    pdf_a *= pdf_a
+    pdf_b *= pdf_b
+    return ti.select(pdf_a > 1e-7, pdf_a / (pdf_a + pdf_b), 0.)
+    
