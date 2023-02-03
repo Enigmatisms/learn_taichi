@@ -9,7 +9,7 @@ import taichi as ti
 import taichi.math as tm
 from taichi.math import vec3
 
-__all__ = ['cosine_hemisphere', 'uniform_hemisphere', 'sample_triangle']
+__all__ = ['cosine_hemisphere', 'uniform_hemisphere', 'sample_triangle', 'mis_weight']
 
 pi_inv = 1. / tm.pi
 
@@ -53,7 +53,8 @@ def sample_triangle(dv1: vec3, dv2: vec3):
 
 @ti.func
 def mis_weight(pdf_a: ti.f32, pdf_b: ti.f32):
-    pdf_a *= pdf_a
-    pdf_b *= pdf_b
+    """ Power heuristic function for MIS weight computation """
+    pdf_a = pdf_a
+    pdf_b = pdf_b
     return ti.select(pdf_a > 1e-7, pdf_a / (pdf_a + pdf_b), 0.)
     

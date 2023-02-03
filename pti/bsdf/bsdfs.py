@@ -90,7 +90,6 @@ class BSDF:
     def delocalize_rotate(self, anchor: vec3, local_dir: vec3):
         R = rotation_between(vec3([0, 1, 0]), anchor)
         return (R @ local_dir).normalized()
-
     
     # ======================= Blinn-Phong ========================
     @ti.func
@@ -122,7 +121,7 @@ class BSDF:
 
     @ti.func
     def sample_lambertian(self, normal: vec3):
-        local_new_dir, pdf = uniform_hemisphere()
+        local_new_dir, pdf = cosine_hemisphere()
         ray_out_d = self.delocalize_rotate(normal, local_new_dir)
         spec = self.eval_lambertian(ray_out_d, normal)
         return ray_out_d, spec, pdf
@@ -172,6 +171,15 @@ class BSDF:
 
     @ti.func
     def get_pdf(self, outdir: vec3, normal: vec3, incid: vec3):
-        """ Some PDF has nothing to do with backward incid (from eye to the surface), like diffusive """
+        """ 
+            Solid angle PDF for a specific incident direction - BSDF sampling
+            Some PDF has nothing to do with backward incid (from eye to the surface), like diffusive 
+            This PDF is actually the PDF of cosine-weighted term * BSDF function value
+            FIXME: to be more completed
+        """
+        pdf = 0.0
         if self._type == 0:
-            pass
+            pdf = tm.max(tm.dot(normal, outdir), 0.0) * INV_PI      # dot is cosine term
+        elif self._type == 1:
+            pdf = tm.max(tm.dot(normal, outdir), 0.0) * INV_PI
+        return pdf

@@ -10,7 +10,6 @@ sys.path.append("..")
 
 import numpy as np
 import taichi as ti
-import taichi.math as tm
 from taichi.math import vec3
 
 from typing import List
@@ -44,6 +43,7 @@ class PathTracer(TracerBase):
         self.anti_alias         = prop['anti_alias']
         self.stratified_sample  = prop['stratified_sampling']   # whether to use stratified sampling
         self.num_shadow_ray     = prop['num_shadow_ray']        # number of shadow samples to trace
+        self.use_mis            = prop['use_mis']               # whether to use multiple importance sampling
         assert(self.num_shadow_ray >= 1)
         self.inv_num_shadow_ray = 1. / float(self.num_shadow_ray)
 
@@ -100,8 +100,10 @@ class PathTracer(TracerBase):
             ray_d = self.pix2ray(i, j)
             ray_o = self.cam_t
             obj_id, tri_id, min_depth = self.ray_intersect(ray_d, ray_o)
+            hit_light       = self.emitter_id[obj_id]   # id for hit emitter, if nothing is hit, this value will be -1
             color           = vec3([0, 0, 0])
             contribution    = vec3([1, 1, 1])
+            emission_weight = 1.0
             for _i in range(self.max_bounce):
                 if obj_id < 0: break                    # nothing is hit, break
                 if ti.static(self.use_rr):
@@ -113,10 +115,11 @@ class PathTracer(TracerBase):
                     if contribution.max() < 1e-4: break     # contribution too small, break
                 normal = self.normals[obj_id, tri_id]
                 hit_point   = ray_d * min_depth + ray_o
-                hit_light   = self.emitter_id[obj_id]   # id for hit emitter, if nothing is hit, this value will be -1
+                hit_light = self.emitter_id[obj_id]
 
                 direct_pdf  = 1.0
                 emitter_pdf = 1.0
+
                 break_flag  = False
                 emit_int    = vec3([0, 0, 0])
                 shadow_int  = vec3([0, 0, 0])
@@ -124,6 +127,7 @@ class PathTracer(TracerBase):
                 direct_spec = vec3([1, 1, 1])
                 for _j in range(self.num_shadow_ray):    # more shadow ray samples
                     emitter, emitter_pdf, emitter_valid = self.sample_light(hit_light)
+                    light_dir = vec3([0, 0, 0])
                     # direct / emission component evaluation
                     if emitter_valid:
                         emit_pos, shadow_int, direct_pdf = emitter.         \
@@ -136,11 +140,14 @@ class PathTracer(TracerBase):
                             shadow_int.fill(0.0)
                     else:       # the only situation for being invalid, is when there is only one source and the ray hit the source
                         break_flag = True
-                        direct_pdf = 1.0
-                        shadow_int.fill(0.0)                # direct reflect is 0, pdf
-                    direct_int += direct_spec * shadow_int / (emitter_pdf * direct_pdf)
-                    if break_flag:      # only in the situation where there is only one hittable area source
                         break
+                    light_pdf = emitter_pdf * direct_pdf
+                    if ti.static(self.use_mis):
+                        bsdf_pdf = self.bsdf_field[obj_id].get_pdf(light_dir, normal, ray_d)
+                        mis_w    = mis_weight(light_pdf, bsdf_pdf)
+                        direct_int += direct_spec * shadow_int * mis_w
+                    else:
+                        direct_int += direct_spec * shadow_int / light_pdf
                 if not break_flag:
                     direct_int *= self.inv_num_shadow_ray
 
@@ -150,10 +157,11 @@ class PathTracer(TracerBase):
                 # indirect component requires sampling 
                 ray_d, indirect_spec, ray_pdf = self.bsdf_field[obj_id].sample_new_ray(ray_d, normal)
                 ray_o = hit_point
-                color += (direct_spec * direct_int / (emitter_pdf * direct_pdf) + emit_int) * contribution
+                color += (direct_int + emit_int * emission_weight) * contribution
                 # VERY IMPORTANT: rendering should be done according to rendering equation (approximation)
                 contribution *= indirect_spec / ray_pdf
                 obj_id, tri_id, min_depth = self.ray_intersect(ray_d, ray_o)
+                # it turns out that MIS for emitter sampling does not yield a very good result
             self.color[i, j] += color
             self.pixels[i, j] = self.color[i, j] / self.cnt[None]
 
@@ -178,4 +186,5 @@ if __name__ == "__main__":
     if profiling:
         ti.profiler.print_kernel_profiler_info() 
     pixels = pt.pixels.to_numpy()
+    pixels /= np.quantile(pixels, 0.95)
     ti.tools.imwrite(pixels, "./outputs/path-tracing.png")

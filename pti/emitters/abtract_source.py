@@ -91,6 +91,16 @@ class TaichiSource:
                 ret_int.fill(0.0)
         return ret_int
 
+    @ti.func
+    def solid_angle_pdf(self, incid_dir: vec3, normal: vec3, depth: float):
+        """ Area PDF converting to solid angle PDF (for hitting a area light) """
+        pdf = 0.0
+        if self._type == 1:
+            # incid dir is ray incident direction (to the area light) 
+            dot_res = ti.abs(ti.math.dot(incid_dir, normal))
+            pdf = ti.select(dot_res > 1e-7, self.inv_area * ti.pow(depth, 2) / dot_res, 0.0)
+        return pdf
+
 class LightSource:
     """
         Sampling function is implemented in Taichi source. Currently:
