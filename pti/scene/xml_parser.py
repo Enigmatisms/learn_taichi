@@ -19,7 +19,7 @@ from bsdf.bsdfs import BSDF_np
 
 from scene.obj_loader import *
 from scene.obj_desc import ObjDescriptor
-from scene.general_parser import get, transform_parse
+from scene.general_parser import get, transform_parse, parse_sphere_element
 
 # import emitters
 from emitters.point import PointSource
@@ -77,15 +77,19 @@ def parse_wavefront(directory: str, obj_list: List[xet.Element], bsdf_dict: dict
     attached_area_dict = {}
     for elem in obj_list:
         trans_r, trans_t = None, None                           # transform
-        filepath_child      = elem.find("string")
-        meshes, normals     = load_obj_file(os.path.join(directory, filepath_child.get("value")))
-        transform_child     = elem.find("transform")
-        if transform_child is not None:
-            trans_r, trans_t    = transform_parse(transform_child)
-            meshes, normals     = apply_transform(meshes, normals, trans_r, trans_t)
-        # AABB calculation should be done after transformation
-        ref_childs           = elem.findall("ref")        
-        bsdf_item = None
+        obj_type = 0
+        if elem.get("type") == "obj":
+            filepath_child      = elem.find("string")
+            meshes, normals     = load_obj_file(os.path.join(directory, filepath_child.get("value")))
+            transform_child     = elem.find("transform")
+            if transform_child is not None:
+                trans_r, trans_t    = transform_parse(transform_child)
+                meshes, normals     = apply_transform(meshes, normals, trans_r, trans_t)
+        else:                   # CURRENTLY, only sphere is supported
+            meshes, normals = parse_sphere_element(elem)
+            obj_type = 1
+        ref_childs     = elem.findall("ref")        
+        bsdf_item      = None
         emitter_ref_id = -1
         for ref_child in ref_childs:
             ref_type = ref_child.get("type")
@@ -96,7 +100,7 @@ def parse_wavefront(directory: str, obj_list: List[xet.Element], bsdf_dict: dict
                 attached_area_dict[emitter_ref_id] = calculate_surface_area(meshes)
         if bsdf_item is None:
             raise ValueError("Object should be attached with a BSDF for now since no default one implemented yet.")
-        all_objs.append(ObjDescriptor(meshes, normals, bsdf_item, trans_r, trans_t, emit_id = emitter_ref_id))
+        all_objs.append(ObjDescriptor(meshes, normals, bsdf_item, trans_r, trans_t, emit_id = emitter_ref_id, _type = obj_type))
     return all_objs, attached_area_dict
 
 def parse_bsdf(bsdf_list: List[xet.Element]):

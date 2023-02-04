@@ -62,9 +62,15 @@
 		<float name="l2" value="1.05"/>
 	</emitter>
 
+	<shape type="sphere">
+		<point name="center" x="3.8" y="0.6" z="1.2"/>
+		<float name="radius" value="0.6"/>
+		<ref type="material" id="white"/>
+	</shape>
+
 	<shape type="obj">
 		<string name="filename" value="meshes/cbox_floor.obj"/>
-		<ref id="white"/>
+		<ref type="material" id="white"/>
 		<transform name="toWorld">
 			<translate x="0" y="0.0" z="0"/>
 		</transform>
@@ -72,23 +78,23 @@
 
 	<shape type="obj">
 		<string name="filename" value="meshes/cbox_ceiling.obj"/>
-		<ref id="white"/>
+		<ref type="material" id="white"/>
 	</shape>
 
 	<shape type="obj">
 		<string name="filename" value="meshes/cbox_back.obj"/>
-		<ref id="white"/>
+		<ref type="material" id="white"/>
 	</shape>
 
 	<shape type="obj">
 		<string name="filename" value="meshes/cbox_greenwall.obj"/>
-		<ref id="right_wall"/>
+		<ref type="material" id="right_wall"/>
 	</shape>
 
 	<shape type="obj">
 		<string name="filename" value="meshes/cbox_redwall.obj"/>
 
-		<ref id="left_wall"/>
+		<ref type="material" id="left_wall"/>
 	</shape>
 
 	<shape type="obj">
@@ -96,7 +102,7 @@
 		<transform name="toWorld">
 			<rotate type="euler" r="0.0" p="0.0" y="0"/>
 		</transform>
-		<ref id="box"/>
+		<ref type="material" id="box"/>
 	</shape>
 
 	<shape type="obj">
@@ -104,6 +110,6 @@
 		<transform name="toWorld">
 			<rotate type="euler" r="0.0" p="0.0" y="-0"/>
 		</transform>
-		<ref id="large_box"/>
+		<ref type="material" id="large_box"/>
 	</shape>
 </scene>

@@ -35,6 +35,9 @@ class TracerBase:
         self.max_bounce = prop['max_bounce']
         self.use_rr     = prop['use_rr']
 
+        self.anti_alias         = False
+        self.stratified_sample  = False
+
         self.focal      = fov2focal(prop['fov'], min(self.w, self.h))
         self.inv_focal  = 1. / self.focal
         self.half_w     = self.w / 2
@@ -56,7 +59,7 @@ class TracerBase:
 
         self.bitmasked_nodes = ti.root.dense(ti.i, self.num_objects).bitmasked(ti.j, max_tri_num)
         self.bitmasked_nodes.place(self.normals)
-        self.bitmasked_nodes.dense(ti.k, 3).place(self.meshes)      # for simple shapes, this would be efficient
+        self.bitmasked_nodes.bitmasked(ti.k, 3).place(self.meshes)      # for simple shapes, this would be efficient
         # triangle has 3 vertices, v1, v2, v3. precom_vec stores (v2 - v1), (v3 - v1)
         # These two precom(puted) vectors can be used in ray intersection and triangle sampling (for shape-attached emitters)
         self.bitmasked_nodes.dense(ti.k, 2).place(self.precom_vec)
@@ -123,21 +126,46 @@ class TracerBase:
         for aabb_idx in range(self.num_objects):
             if self.aabb_test(aabb_idx, ray, start_p) == False: continue
             tri_num = self.mesh_cnt[aabb_idx]
-            for mesh_idx in range(tri_num):
-                normal = self.normals[aabb_idx, mesh_idx]
-                if tm.dot(ray, normal) >= 0.0: continue     # back-face culling
-                # Sadly, Taichi does not support slicing. I think this restrict the use cases of Matrix field
-                p1 = self.meshes[aabb_idx, mesh_idx, 0]
-                vec1 = self.precom_vec[aabb_idx, mesh_idx, 0]
-                vec2 = self.precom_vec[aabb_idx, mesh_idx, 1]
-                mat = ti.Matrix.cols([vec1, vec2, -ray]).inverse()
-                u, v, t = mat @ (start_p - p1)
-                if u >= 0 and v >= 0 and u + v <= 1.0:
-                    if t > 0 and t < min_depth:
-                        min_depth = t
-                        obj_id = aabb_idx
-                        tri_id = mesh_idx
-        return (obj_id, tri_id, min_depth)
+            if tri_num:
+                for mesh_idx in range(tri_num):
+                    normal = self.normals[aabb_idx, mesh_idx]
+                    if tm.dot(ray, normal) >= 0.0: continue     # back-face culling
+                    # Sadly, Taichi does not support slicing. I think this restrict the use cases of Matrix field
+                    p1 = self.meshes[aabb_idx, mesh_idx, 0]
+                    vec1 = self.precom_vec[aabb_idx, mesh_idx, 0]
+                    vec2 = self.precom_vec[aabb_idx, mesh_idx, 1]
+                    mat = ti.Matrix.cols([vec1, vec2, -ray]).inverse()
+                    u, v, t = mat @ (start_p - p1)
+                    if u >= 0 and v >= 0 and u + v <= 1.0:
+                        if t > 0 and t < min_depth:
+                            min_depth = t
+                            obj_id = aabb_idx
+                            tri_id = mesh_idx
+            else:
+                center  = self.meshes[aabb_idx, 0, 0]
+                radius2 = self.meshes[aabb_idx, 0, 1][0] ** 2
+                s2c     = center - start_p
+                center_norm2 = s2c.norm_sqr()
+                proj_norm = tm.dot(ray, s2c)
+                c2ray_norm = center_norm2 - proj_norm ** 2  # center to ray distance ** 2
+                if c2ray_norm >= radius2: continue
+                ray_t = proj_norm
+                if center_norm2 > radius2:
+                    ray_t -= ti.sqrt(radius2 - c2ray_norm)
+                else:
+                    ray_t += ti.sqrt(radius2 - c2ray_norm)
+                if ray_t > 0 and ray_t < min_depth:
+                    min_depth = ray_t
+                    obj_id = aabb_idx
+                    tri_id = -1
+        normal = vec3([1, 0, 0])
+        if obj_id >= 0:
+            if tri_id < 0:
+                center = self.meshes[obj_id, 0, 0]
+                normal = (start_p + min_depth * ray - center).normalized() 
+            else:
+                normal = self.normals[obj_id, tri_id]
+        return (obj_id, normal, min_depth)
 
     @ti.func
     def does_intersect(self, ray, start_p, depth = -1.0) -> bool:
@@ -156,16 +184,32 @@ class TracerBase:
         for aabb_idx in range(self.num_objects):
             if self.aabb_test(aabb_idx, ray, start_p) == False: continue
             tri_num = self.mesh_cnt[aabb_idx]
-            for mesh_idx in range(tri_num):
-                p1 = self.meshes[aabb_idx, mesh_idx, 0]
-                vec1 = self.precom_vec[aabb_idx, mesh_idx, 0]
-                vec2 = self.precom_vec[aabb_idx, mesh_idx, 1]
-                mat = ti.Matrix.cols([vec1, vec2, -ray]).inverse()
-                u, v, t = mat @ (start_p - p1)
-                if u >= 0 and v >= 0 and u + v <= 1.0:
-                    if t > 0 and t < depth:
-                        flag = True
-                        break
+            if tri_num:
+                for mesh_idx in range(tri_num):
+                    p1 = self.meshes[aabb_idx, mesh_idx, 0]
+                    vec1 = self.precom_vec[aabb_idx, mesh_idx, 0]
+                    vec2 = self.precom_vec[aabb_idx, mesh_idx, 1]
+                    mat = ti.Matrix.cols([vec1, vec2, -ray]).inverse()
+                    u, v, t = mat @ (start_p - p1)
+                    if u >= 0 and v >= 0 and u + v <= 1.0:
+                        if t > 0 and t < depth:
+                            flag = True
+                            break
+            else:
+                center  = self.meshes[aabb_idx, 0, 0]
+                radius2 = self.meshes[aabb_idx, 0, 1][0] ** 2
+                s2c     = center - start_p
+                center_norm2 = s2c.norm_sqr()
+                proj_norm = tm.dot(ray, s2c)
+                c2ray_norm = center_norm2 - proj_norm ** 2  # center to ray distance ** 2
+                if c2ray_norm >= radius2: continue
+                ray_t = proj_norm
+                if center_norm2 > radius2:
+                    ray_t -= ti.sqrt(radius2 - c2ray_norm)
+                else:
+                    ray_t += ti.sqrt(radius2 - c2ray_norm)
+                if ray_t > 0 and ray_t < depth:
+                    flag = True
             if flag == True: break
         return flag
 

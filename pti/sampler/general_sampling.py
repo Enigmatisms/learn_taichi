@@ -9,7 +9,7 @@ import taichi as ti
 import taichi.math as tm
 from taichi.math import vec3
 
-__all__ = ['cosine_hemisphere', 'uniform_hemisphere', 'sample_triangle', 'mis_weight']
+__all__ = ['cosine_hemisphere', 'uniform_hemisphere', 'sample_triangle', 'mis_weight', 'mod_phong_hemisphere']
 
 pi_inv = 1. / tm.pi
 
@@ -21,11 +21,23 @@ def cosine_hemisphere():
     """
     eps = ti.random(float)
     cos_theta = ti.sqrt(eps)       # zenith angle
-    sin_theta = ti.sqrt(1. - cos_theta * cos_theta)
+    sin_theta = ti.sqrt(1. - eps)
     phi = 2. * tm.pi * ti.random(float)         # uniform dist azimuth angle
     pdf = cos_theta * pi_inv        # easy to deduct, just try it
     # rotational offset w.r.t axis [0, 1, 0] & pdf
     
+    return vec3([tm.cos(phi) * sin_theta, cos_theta, tm.sin(phi) * sin_theta]), pdf
+
+@ti.func
+def mod_phong_hemisphere(alpha: ti.f32):
+    """ 
+        PDF for modified Phong model 
+        Lafortune & Willems, Using the Modified Phong Reflectance Model for Physically Based Rendering, 1994
+    """
+    cos_theta = tm.pow(ti.random(float), 1. / (alpha + 1.))
+    sin_theta = ti.sqrt(1. - cos_theta * cos_theta)
+    phi = 2. * tm.pi * ti.random(float) 
+    pdf = 0.5 * (1. + alpha) * tm.pow(cos_theta, alpha) * pi_inv
     return vec3([tm.cos(phi) * sin_theta, cos_theta, tm.sin(phi) * sin_theta]), pdf
 
 @ti.func

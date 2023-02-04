@@ -24,9 +24,8 @@ from scene.xml_parser import mitsuba_parsing
 from sampler.general_sampling import *
 
 """
-2.2 Task: understand multi-importance sampling method
-- BSDF / light sampling for direct component evaluation
-- Emitter weight MIS for emitter intersection 
+2.5 TODO:
+- Refraction / BTDF implementation (according to previous implementation in Rust)
 """
 
 @ti.data_oriented
@@ -63,10 +62,11 @@ class PathTracer(TracerBase):
         for i, obj in enumerate(objects):
             for j, (mesh, normal) in enumerate(zip(obj.meshes, obj.normals)):
                 self.normals[i, j] = ti.Vector(normal) 
-                for k in range(3):
-                    self.meshes[i, j, k]  = ti.Vector(mesh[k])
-                self.precom_vec[i, j, 0] = self.meshes[i, j, 1] - self.meshes[i, j, 0]                    
-                self.precom_vec[i, j, 1] = self.meshes[i, j, 2] - self.meshes[i, j, 0]             
+                for k, vec in enumerate(mesh):
+                    self.meshes[i, j, k]  = ti.Vector(vec)
+                if mesh.shape[0] > 2:       # not a sphere
+                    self.precom_vec[i, j, 0] = self.meshes[i, j, 1] - self.meshes[i, j, 0]                    
+                    self.precom_vec[i, j, 1] = self.meshes[i, j, 2] - self.meshes[i, j, 0]             
             self.mesh_cnt[i]    = obj.tri_num
             self.bsdf_field[i]  = obj.bsdf.export()
             self.aabbs[i, 0]    = ti.Matrix(obj.aabb[0])        # unrolled
@@ -99,7 +99,7 @@ class PathTracer(TracerBase):
         for i, j in self.pixels:
             ray_d = self.pix2ray(i, j)
             ray_o = self.cam_t
-            obj_id, tri_id, min_depth = self.ray_intersect(ray_d, ray_o)
+            obj_id, normal, min_depth = self.ray_intersect(ray_d, ray_o)
             hit_light       = self.emitter_id[obj_id]   # id for hit emitter, if nothing is hit, this value will be -1
             color           = vec3([0, 0, 0])
             contribution    = vec3([1, 1, 1])
@@ -113,7 +113,6 @@ class PathTracer(TracerBase):
                     else: contribution *= 1. / max_value    # unbiased calculation
                 else:
                     if contribution.max() < 1e-4: break     # contribution too small, break
-                normal = self.normals[obj_id, tri_id]
                 hit_point   = ray_d * min_depth + ray_o
                 hit_light = self.emitter_id[obj_id]
 
@@ -160,7 +159,7 @@ class PathTracer(TracerBase):
                 color += (direct_int + emit_int * emission_weight) * contribution
                 # VERY IMPORTANT: rendering should be done according to rendering equation (approximation)
                 contribution *= indirect_spec / ray_pdf
-                obj_id, tri_id, min_depth = self.ray_intersect(ray_d, ray_o)
+                obj_id, normal, min_depth = self.ray_intersect(ray_d, ray_o)
                 # it turns out that MIS for emitter sampling does not yield a very good result
             self.color[i, j] += color
             self.pixels[i, j] = self.color[i, j] / self.cnt[None]
@@ -186,5 +185,4 @@ if __name__ == "__main__":
     if profiling:
         ti.profiler.print_kernel_profiler_info() 
     pixels = pt.pixels.to_numpy()
-    pixels /= np.quantile(pixels, 0.95)
     ti.tools.imwrite(pixels, "./outputs/path-tracing.png")

@@ -39,12 +39,17 @@ def load_obj_file(path: str, precomp_normal = True, verbose = False):
         print(f"Mesh loaded from {path}, output shape: {mesh_faces.shape}. Normal output: {precomp_normal}")
     return mesh_faces, normals
 
-def calculate_surface_area(meshes: Arr):
+def calculate_surface_area(meshes: Arr, _type = 0):
     area_sum = 0.
-    for face in meshes:
-        dv1 = face[1] - face[0]
-        dv2 = face[2] - face[0]
-        area_sum += np.linalg.norm(np.cross(dv1, dv2)) / 2.
+    if _type == 0:
+        for face in meshes:
+            dv1 = face[1] - face[0]
+            dv2 = face[2] - face[0]
+            area_sum += np.linalg.norm(np.cross(dv1, dv2)) / 2.
+    elif _type == 1:
+        radius = meshes[0, 1, 0]
+        # ellipsoid surface area approximation
+        area_sum = 4. * np.pi * radius ** 2
     return area_sum
 
 def apply_transform(meshes: Arr, normals: Arr, trans_r: Arr, trans_t: Arr) -> Arr:

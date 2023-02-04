@@ -44,10 +44,11 @@ class BlinnPhongTracer(TracerBase):
     def initialze(self, objects: List[ObjDescriptor]):
         for i, obj in enumerate(objects):
             for j, (mesh, normal) in enumerate(zip(obj.meshes, obj.normals)):
-                for k in range(3):
-                    self.meshes[i, j, k]  = ti.Vector(mesh[k])
-                self.precom_vec[i, j, 0] = self.meshes[i, j, 1] - self.meshes[i, j, 0]                    
-                self.precom_vec[i, j, 1] = self.meshes[i, j, 2] - self.meshes[i, j, 0]                    
+                for k, vec in enumerate(mesh):
+                    self.meshes[i, j, k]  = ti.Vector(vec)
+                if mesh.shape[0] > 2:       # not a sphere
+                    self.precom_vec[i, j, 0] = self.meshes[i, j, 1] - self.meshes[i, j, 0]                    
+                    self.precom_vec[i, j, 1] = self.meshes[i, j, 2] - self.meshes[i, j, 0]                     
                 self.normals[i, j] = ti.Vector(normal) 
             self.mesh_cnt[i]    = obj.tri_num
             self.shininess[i]   = obj.bsdf.k_g
@@ -59,13 +60,12 @@ class BlinnPhongTracer(TracerBase):
     def render(self, emit_pos: vec3):
         for i, j in self.pixels:
             ray = self.pix2ray(i, j)
-            obj_id, tri_id, min_depth = self.ray_intersect(ray, self.cam_t)
+            obj_id, normal, min_depth = self.ray_intersect(ray, self.cam_t)
             # Iterate through all the meshes and find the minimum depth
             if obj_id >= 0:
                 if ti.static(REDENDER_DEPTH):
                     self.depth_map[i, j] = min_depth
                 # Calculate Blinn-Phong lighting model
-                normal = self.normals[obj_id, tri_id]
                 hit_point  = ray * min_depth + self.cam_t
                 to_emitter = emit_pos - hit_point
                 emitter_d  = to_emitter.norm()
@@ -85,7 +85,7 @@ class BlinnPhongTracer(TracerBase):
 
 if __name__ == "__main__":
     profiling = False
-    ti.init(kernel_profiler = profiling)
+    ti.init(arch = ti.vulkan, kernel_profiler = profiling)
     emitter_configs, _, meshes, configs = mitsuba_parsing("../scene/test/", "point_cbox.xml")
     emitter = emitter_configs[0]
     emitter_pos = vec3(emitter.pos)

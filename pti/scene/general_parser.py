@@ -13,13 +13,15 @@ from scipy.spatial.transform import Rotation as Rot
 def get(node: xet.Element, name: str, _type = float):
     return _type(node.get(name))
 
-def parse_str(val_str: str) -> Arr:
+def parse_str(val_str: str, no_else_branch = False) -> Arr:
     splitter = (',', ' ')
     for split in splitter:
         if split in val_str:
             all_parts = val_str.split(split)
             return np.float32([float(part.strip()) for part in all_parts])
     else:       # single scalar marked as RGB
+        if no_else_branch:
+            raise ValueError("Value can not be a single digit, should be a vector splitted by ',' or [space]")
         return np.float32([float(val_str.strip())] * 3)
 
 def rgb_parse(elem: xet.Element):
@@ -43,8 +45,12 @@ def rgb_parse(elem: xet.Element):
                 return parse_str(val_str)
 
 def vec3d_parse(elem: xet.Element):
-    if elem.tag == "point" and elem.get("name") in ("position", "direction", "center"):
-        return np.float32([get(elem, "x"), get(elem, "y"), get(elem, "z")])
+    if elem.tag == "point":
+        if elem.find("value") is None:
+            return np.float32([get(elem, "x"), get(elem, "y"), get(elem, "z")])
+        else:
+            # for positions, implicit float -> vec3 conversion is not allowed
+            return parse_str(elem.get("value"), no_else_branch = True)  
 
 def transform_parse(transform_elem: xet.Element) -> Tuple[Arr, Arr]:
     """
@@ -87,4 +93,10 @@ def transform_parse(transform_elem: xet.Element) -> Tuple[Arr, Arr]:
     # Note that, trans_r (rotation) is defualt to be intrinsic (apply under the centroid coordinate)
     # Therefore, do not use trans_r unless you know how to correctly transform objects with it
     return trans_r, trans_t         # trans_t and trans_r could be None, if <transform> is not defined in the object
-    
+
+def parse_sphere_element(elem: xet.Element):
+    sphere_info = np.zeros((1, 2, 3), np.float32)
+    sphere_info[0, 0] = vec3d_parse(elem.find("point"))
+    radius = get(elem.find("float"), "value")
+    sphere_info[0, 1] = np.full((3, ), radius)
+    return sphere_info, np.float32([[0, 1, 0]])    # sphere has no explicit normal
