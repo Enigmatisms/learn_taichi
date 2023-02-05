@@ -9,7 +9,8 @@ import taichi as ti
 import taichi.math as tm
 from taichi.math import vec3
 
-__all__ = ['cosine_hemisphere', 'uniform_hemisphere', 'sample_triangle', 'mis_weight', 'mod_phong_hemisphere']
+__all__ = ['cosine_hemisphere', 'uniform_hemisphere', 'sample_triangle', 
+            'mis_weight', 'mod_phong_hemisphere', 'frensel_hemisphere']
 
 pi_inv = 1. / tm.pi
 
@@ -50,6 +51,21 @@ def uniform_hemisphere():
     phi = 2. * tm.pi * ti.random(float)
     pdf = 0.5 * pi_inv
     return vec3([tm.cos(phi) * sin_theta, cos_theta, tm.sin(phi) * sin_theta]), pdf
+
+@ti.func
+def frensel_hemisphere(nu: ti.f32, nv: ti.f32):
+    eps1 = ti.random(ti.f32) * 4.
+    inner_angle = eps1 - tm.floor(eps1)
+    tan_phi = ti.sqrt((nu + 1) / (nv + 1)) * ti.tan(tm.pi / 2 * inner_angle)
+    cos_phi2 = 1. / (1. + tan_phi ** 2 + 1e-8)
+    sin_phi2 = 1. - cos_phi2
+    cos_phi = ti.sqrt(cos_phi2)
+    if eps1 > 1. and eps1 <= 3.: cos_phi *= -1.
+    sin_phi = ti.sqrt(sin_phi2) * tm.sign(2. - eps1)
+    power_coeff = nu * cos_phi2 + nv * sin_phi2
+    cos_theta = tm.pow(1. - ti.random(ti.f32), 1. / (power_coeff + 1. + 1e-8))
+    sin_theta = ti.sqrt(1 - cos_theta * cos_theta)
+    return vec3([cos_phi * sin_theta, cos_theta, sin_phi * sin_theta]), power_coeff
 
 @ti.func
 def sample_triangle(dv1: vec3, dv2: vec3):

@@ -62,7 +62,7 @@ class TracerBase:
         self.bitmasked_nodes.bitmasked(ti.k, 3).place(self.meshes)      # for simple shapes, this would be efficient
         # triangle has 3 vertices, v1, v2, v3. precom_vec stores (v2 - v1), (v3 - v1)
         # These two precom(puted) vectors can be used in ray intersection and triangle sampling (for shape-attached emitters)
-        self.bitmasked_nodes.dense(ti.k, 2).place(self.precom_vec)
+        self.bitmasked_nodes.dense(ti.k, 3).place(self.precom_vec)
 
         self.mesh_cnt   = ti.field(ti.i32, self.num_objects)
         self.cnt        = ti.field(ti.i32, ())                          # useful in path tracer (sample counter)
@@ -119,8 +119,7 @@ class TracerBase:
         obj_id = -1
         tri_id = -1
         if min_depth > 0.0:
-            start_p += ray * 1e-3
-            min_depth -= 2e-3
+            min_depth -= 1e-3
         else:
             min_depth = 1e7
         for aabb_idx in range(self.num_objects):
@@ -137,7 +136,7 @@ class TracerBase:
                     mat = ti.Matrix.cols([vec1, vec2, -ray]).inverse()
                     u, v, t = mat @ (start_p - p1)
                     if u >= 0 and v >= 0 and u + v <= 1.0:
-                        if t > 0 and t < min_depth:
+                        if t > 1e-3 and t < min_depth:
                             min_depth = t
                             obj_id = aabb_idx
                             tri_id = mesh_idx
@@ -154,7 +153,7 @@ class TracerBase:
                     ray_t -= ti.sqrt(radius2 - c2ray_norm)
                 else:
                     ray_t += ti.sqrt(radius2 - c2ray_norm)
-                if ray_t > 0 and ray_t < min_depth:
+                if ray_t > 1e-3 and ray_t < min_depth:
                     min_depth = ray_t
                     obj_id = aabb_idx
                     tri_id = -1
@@ -176,8 +175,7 @@ class TracerBase:
             C++ supports compile-time branching via template parameter, but Taichi can not "pass" compile-time constants
         """
         if depth > 0.0:
-            start_p += ray * 1e-3
-            depth -= 2e-3
+            depth -= 1e-3
         else:
             depth = 1e7
         flag = False
@@ -192,7 +190,7 @@ class TracerBase:
                     mat = ti.Matrix.cols([vec1, vec2, -ray]).inverse()
                     u, v, t = mat @ (start_p - p1)
                     if u >= 0 and v >= 0 and u + v <= 1.0:
-                        if t > 0 and t < depth:
+                        if t > 1e-4 and t < depth:
                             flag = True
                             break
             else:
@@ -208,7 +206,7 @@ class TracerBase:
                     ray_t -= ti.sqrt(radius2 - c2ray_norm)
                 else:
                     ray_t += ti.sqrt(radius2 - c2ray_norm)
-                if ray_t > 0 and ray_t < depth:
+                if ray_t > 1e-3 and ray_t < depth:
                     flag = True
             if flag == True: break
         return flag

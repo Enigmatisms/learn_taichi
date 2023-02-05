@@ -18,6 +18,7 @@ from tracer.tracer_base import TracerBase
 from emitters.abtract_source import LightSource, TaichiSource
 
 from bsdf.bsdfs import BSDF
+from scene.opts import get_options
 from scene.obj_desc import ObjDescriptor
 from scene.xml_parser import mitsuba_parsing
 
@@ -25,6 +26,7 @@ from sampler.general_sampling import *
 
 """
 2.5 TODO:
+- One more BSDF (FrenselBlend)
 - Refraction / BTDF implementation (according to previous implementation in Rust)
 """
 
@@ -59,6 +61,9 @@ class PathTracer(TracerBase):
         self.initialze(emitters, objects)
 
     def initialze(self, emitters: List[LightSource], objects: List[ObjDescriptor]):
+        for i, emitter in enumerate(emitters):
+            self.src_field[i] = emitter.export()
+            self.src_field[i].obj_ref_id = -1
         for i, obj in enumerate(objects):
             for j, (mesh, normal) in enumerate(zip(obj.meshes, obj.normals)):
                 self.normals[i, j] = ti.Vector(normal) 
@@ -67,13 +72,15 @@ class PathTracer(TracerBase):
                 if mesh.shape[0] > 2:       # not a sphere
                     self.precom_vec[i, j, 0] = self.meshes[i, j, 1] - self.meshes[i, j, 0]                    
                     self.precom_vec[i, j, 1] = self.meshes[i, j, 2] - self.meshes[i, j, 0]             
+                    self.precom_vec[i, j, 2] = self.meshes[i, j, 0]        
             self.mesh_cnt[i]    = obj.tri_num
             self.bsdf_field[i]  = obj.bsdf.export()
             self.aabbs[i, 0]    = ti.Matrix(obj.aabb[0])        # unrolled
             self.aabbs[i, 1]    = ti.Matrix(obj.aabb[1])
-            self.emitter_id[i]  = obj.emitter_ref_id
-        for i, emitter in enumerate(emitters):
-            self.src_field[i] = emitter.export()
+            emitter_ref_id      = obj.emitter_ref_id
+            self.emitter_id[i]  = emitter_ref_id
+            if emitter_ref_id  >= 0:
+                self.src_field[emitter_ref_id].obj_ref_id = i
 
     @ti.func
     def sample_light(self, no_sample: ti.i32):
@@ -108,7 +115,7 @@ class PathTracer(TracerBase):
                 if obj_id < 0: break                    # nothing is hit, break
                 if ti.static(self.use_rr):
                     # Simple Russian Roullete ray termination
-                    max_value = ti.max(contribution)
+                    max_value = contribution.max()
                     if ti.random(float) > max_value: break
                     else: contribution *= 1. / max_value    # unbiased calculation
                 else:
@@ -130,7 +137,7 @@ class PathTracer(TracerBase):
                     # direct / emission component evaluation
                     if emitter_valid:
                         emit_pos, shadow_int, direct_pdf = emitter.         \
-                            sample(self.precom_vec, self.normals, self.mesh_cnt, hit_light, hit_point)        # sample light
+                            sample(self.precom_vec, self.normals, self.mesh_cnt, hit_point)        # sample light
                         to_emitter  = emit_pos - hit_point
                         emitter_d   = to_emitter.norm()
                         light_dir   = to_emitter / emitter_d
@@ -164,25 +171,27 @@ class PathTracer(TracerBase):
             self.color[i, j] += color
             self.pixels[i, j] = self.color[i, j] / self.cnt[None]
 
-
 if __name__ == "__main__":
-    profiling = False
-    ti.init(arch = ti.vulkan, kernel_profiler = profiling, default_ip = ti.i32, default_fp = ti.f32)
-    emitter_configs, _, meshes, configs = mitsuba_parsing("../scene/test/", "test.xml")
+    options = get_options()
+    ti.init(arch = ti.vulkan, kernel_profiler = options.profile, default_ip = ti.i32, default_fp = ti.f32)
+    emitter_configs, _, meshes, configs = mitsuba_parsing(options.input_path, options.scene)  # complex_cornell
     pt = PathTracer(emitter_configs, meshes, configs)
     gui = ti.GUI('Path Tracing', (pt.w, pt.h))
-    while gui.running:
+    iter_cnt = 0
+    while True:
         for e in gui.get_events(gui.PRESS):
             if e.key == gui.ESCAPE:
                 gui.running = False
         pt.render()
         gui.set_image(pt.pixels)
         gui.show()
+        iter_cnt += 1
+        if options.iter_num > 0 and iter_cnt > options.iter_num: break
         if gui.running == False: break
         gui.clear()
         pt.reset()
 
-    if profiling:
+    if options.profile:
         ti.profiler.print_kernel_profiler_info() 
     pixels = pt.pixels.to_numpy()
-    ti.tools.imwrite(pixels, "./outputs/path-tracing.png")
+    ti.tools.imwrite(pixels, options.output_path + options.img_name)

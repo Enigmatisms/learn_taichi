@@ -11,7 +11,7 @@ import numpy as np
 import taichi as ti
 import taichi.math as tm
 import xml.etree.ElementTree as xet
-from taichi.math import vec3, vec4
+from taichi.math import vec3, vec4, mat3
 
 from la.geo_optics import *
 from la.cam_transform import *
@@ -19,7 +19,6 @@ from sampler.general_sampling import *
 from scene.general_parser import rgb_parse
 
 __all__ = ['BSDF_np', 'BSDF']
-
 
 INV_PI = 1. / tm.pi
 
@@ -35,7 +34,8 @@ class BSDF_np:
     __all_specular_name     = {"specular", "k_s"}
     __all_absorption_name   = {"absorptions", "k_a"}
     # Attention: microfacet support will not be added recently
-    __type_mapping          = {"blinn-phong": 0, "lambertian": 1, "specular": 2, "microfacet": 3, "mod-phong": 4}
+    __type_mapping          = {"blinn-phong": 0, "lambertian": 1, "specular": 2, "microfacet": 3, "mod-phong": 4,
+                               "frensel-blend": 5}
     
     def __init__(self, elem: xet.Element):
         self.type: str = elem.get("type")
@@ -72,6 +72,8 @@ class BSDF_np:
         if self.type_id == 2:
             if self.k_g.max() < 1e-4:       # glossiness (actually means roughness) in specular BSDF being too "small"
                 self.is_delta = True
+        elif self.type_id == 5:             # precomputed coefficient for Frensel Blend BSDF
+            self.k_g[2] = np.sqrt((self.k_g[0] + 1) * (self.k_g[1] + 1)) / (8. * np.pi)
 
     def export(self):
         return BSDF(
@@ -101,7 +103,7 @@ class BSDF:
     @ti.func
     def delocalize_rotate(self, anchor: vec3, local_dir: vec3):
         R = rotation_between(vec3([0, 1, 0]), anchor)
-        return (R @ local_dir).normalized()
+        return (R @ local_dir).normalized(), R
     
     # ======================= Blinn-Phong ========================
     @ti.func
@@ -121,7 +123,7 @@ class BSDF:
     @ti.func
     def sample_blinn_phong(self, incid: vec3, normal: vec3):
         local_new_dir, pdf = cosine_hemisphere()
-        ray_out_d = self.delocalize_rotate(normal, local_new_dir)
+        ray_out_d, _ = self.delocalize_rotate(normal, local_new_dir)
         spec = self.eval_blinn_phong(incid, ray_out_d, normal)
         return ray_out_d, spec, pdf
 
@@ -149,13 +151,68 @@ class BSDF:
         elif eps < pdf + self.k_s.max():    # specular sampling
             local_new_dir, pdf = mod_phong_hemisphere(self.mean[2])
             reflect_view = (-2 * normal * tm.dot(incid, normal) + incid).normalized()
-            ray_out_d = self.delocalize_rotate(reflect_view, local_new_dir)
+            ray_out_d, _ = self.delocalize_rotate(reflect_view, local_new_dir)
             spec = self.eval_mod_phong(incid, ray_out_d, normal)
         else:                               # zero contribution
             # it doesn't matter even we don't return a valid ray_out_d
             # since returned spec here is 0, contribution will be 0 and the ray will be terminated by RR or cut-off
             pdf = 1. - pdf - self.k_s.max()     # seems to be absorbed
         # Sample around reflected view dir (while blinn-phong samples around normal)
+        return ray_out_d, spec, pdf
+    
+    # ======================= Frensel-Blend =======================
+    """
+        For Frensel Blend (by Ashikhmin and Shirley 2002), n_u and n_v will be stored in k_g
+        since k_g will not be used, k_d and k_s preserve their original meaning
+    """
+
+    @ti.func
+    def frensel_blend_dir(self, incid: vec3, half: vec3, normal: vec3, power_coeff: ti.f32):
+        reflected, dot_incid = inci_reflect_dir(incid, half)
+        half_pdf = self.k_g[2] * tm.pow(tm.dot(half, normal), power_coeff)
+        pdf = half_pdf / ti.abs(dot_incid)
+        valid_sample = tm.dot(normal, reflected) > 0.
+        return reflected, pdf, valid_sample
+    
+    @ti.func
+    def frensel_cos2_sin2(self, half_vec: vec3, normal: vec3, R: mat3, dot_half: ti.f32):
+        transed_x = (R @ vec3([1, 0, 0])).normalized()
+        cos_phi2  = tm.dot(transed_x, (half_vec - dot_half * normal).normalized()) ** 2       # azimuth angle of half vector 
+        return cos_phi2, 1. - cos_phi2
+
+    @ti.func
+    def eval_frensel_blend(self, ray_in: vec3, ray_out: vec3, normal: vec3, R: mat3):
+        # specular part, note that ray out is actually incident light in forward tracing
+        half_vec = (ray_out - ray_in)
+        dot_out  = tm.dot(normal, ray_out)                      # FIXME: what if light travels from inside to outside?
+        spec = vec3([0, 0, 0])
+        if dot_out > 0. and ti.abs(half_vec).max() > 1e-4:      # ray_in and ray_out not on the exact opposite direction
+            half_vec = half_vec.normalized()
+            dot_in   = -tm.dot(normal, ray_in)              # incident dot should always be positive (otherwise it won't hit this point)
+            dot_half = ti.abs(tm.dot(normal, half_vec))
+            dot_hk   = ti.abs(tm.dot(half_vec, ray_out))
+            frensel  = schlick_frensel(self.k_s, dot_hk)
+            cos_phi2, sin_phi2 = self.frensel_cos2_sin2(half_vec, normal, R, dot_half)
+            # k_g[2] should store sqrt((n_u + 1)(n_v + 1)) / 8pi
+            denom = dot_hk * tm.max(dot_in, dot_out)
+            specular = self.k_g[2] * tm.pow(dot_half, self.k_g[0] * cos_phi2 + self.k_g[1] * sin_phi2) * frensel / denom
+            # diffusive part
+            diffuse  = 28. / (23. * tm.pi) * self.k_d * (1. - self.k_s)
+            pow5_in  = tm.pow(1. - dot_in / 2., 5)
+            pow5_out = tm.pow(1. - dot_out / 2., 5)
+            diffuse *= (1. - pow5_in) * (1. - pow5_out)
+            # TODO: should dot_out be here?
+            spec = (specular + diffuse) * dot_out
+        return spec
+
+    @ti.func
+    def sample_frensel_blend(self, incid: vec3, normal: vec3):
+        local_new_dir, power_coeff = frensel_hemisphere(self.k_g[0], self.k_g[1])
+        ray_half, R = self.delocalize_rotate(normal, local_new_dir)
+        ray_out_d, pdf, is_valid = self.frensel_blend_dir(incid, ray_half, normal, power_coeff)
+        spec = vec3([0, 0, 0])
+        if is_valid:
+            spec = self.eval_frensel_blend(incid, ray_out_d, normal, R)
         return ray_out_d, spec, pdf
     
     # ======================= Lambertian ========================
@@ -167,7 +224,7 @@ class BSDF:
     @ti.func
     def sample_lambertian(self, normal: vec3):
         local_new_dir, pdf = cosine_hemisphere()
-        ray_out_d = self.delocalize_rotate(normal, local_new_dir)
+        ray_out_d, _ = self.delocalize_rotate(normal, local_new_dir)
         spec = self.eval_lambertian(ray_out_d, normal)
         return ray_out_d, spec, pdf
 
@@ -200,6 +257,9 @@ class BSDF:
             ret_spec = self.eval_specular(incid, out, normal)
         elif self._type == 4:
             ret_spec = self.eval_mod_phong(incid, out, normal)
+        elif self._type == 5:
+            R = rotation_between(vec3([0, 1, 0]), normal)
+            ret_spec = self.eval_frensel_blend(incid, out, normal, R)
         else:
             print(f"Warnning: unknown or unsupported BSDF type: {self._type} during evaluation.")
         return ret_spec
@@ -219,8 +279,10 @@ class BSDF:
             ret_dir, ret_spec, pdf = self.sample_lambertian(normal)
         elif self._type == 2:       # Specular
             ret_dir, ret_spec, pdf = self.sample_specular(incid, normal)
-        elif self._type == 4:       # Specular
+        elif self._type == 4:       # Modified-Phong
             ret_dir, ret_spec, pdf = self.sample_mod_phong(incid, normal)
+        elif self._type == 5:       # Frensel-Blend
+            ret_dir, ret_spec, pdf = self.sample_frensel_blend(incid, normal)
         else:
             print(f"Warnning: unknown or unsupported BSDF type: {self._type} during evaluation.")
         return ret_dir, ret_spec, pdf
@@ -233,13 +295,13 @@ class BSDF:
             This PDF is actually the PDF of cosine-weighted term * BSDF function value
         """
         pdf = 0.0
+        dot_outdir = tm.dot(normal, outdir)
         if self._type == 0:
-            pdf = tm.max(tm.dot(normal, outdir), 0.0) * INV_PI      # dot is cosine term
+            pdf = tm.max(dot_outdir, 0.0) * INV_PI      # dot is cosine term
         elif self._type == 1:
-            pdf = tm.max(tm.dot(normal, outdir), 0.0) * INV_PI
+            pdf = tm.max(dot_outdir, 0.0) * INV_PI
         elif self._type == 4:
             # FIXME: there will be much refactoring work when the ray can penetrate the meshes
-            dot_outdir = tm.dot(normal, outdir)
             if dot_outdir > 0.0:
                 glossiness      = self.mean[2]
                 reflect_view, _ = inci_reflect_dir(incid, normal)
@@ -247,4 +309,11 @@ class BSDF:
                 specular_pdf    = 0.5 * (glossiness + 1.) * INV_PI * tm.pow(dot_ref_out, glossiness)
                 diffuse_pdf     = dot_outdir * INV_PI
                 pdf = self.k_d.max() * diffuse_pdf + self.k_s.max() * specular_pdf
+        elif self._type == 5:
+            if dot_outdir > 0.0: 
+                half_vec = (outdir - incid).normalized()
+                dot_half = tm.dot(half_vec, normal)
+                R = rotation_between(vec3([0, 1, 0]), normal)
+                cos_phi2, sin_phi2 = self.frensel_cos2_sin2(half_vec, normal, R, dot_half)
+                pdf = self.k_g[2] * tm.pow(dot_half, self.k_g[0] * cos_phi2 + self.k_g[1] * sin_phi2) * 4.
         return pdf

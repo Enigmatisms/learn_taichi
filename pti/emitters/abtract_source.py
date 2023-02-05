@@ -26,6 +26,7 @@ class TaichiSource:
         The following implementation is much simpler, and light source will not consume too much memory
     """
     _type:      ti.i32      # 0 Point, 1 Area, 2 Spot, 3 Directional
+    obj_ref_id: ti.i32      # Referring to the attaching object
     intensity:  vec3
     pos:        vec3
     dirv:       vec3
@@ -42,7 +43,7 @@ class TaichiSource:
     @ti.func
     def sample(
         self, dvs: ti.template(), normals: ti.template(), 
-        mesh_cnt: ti.template(), idx: ti.i32, hit_pos: vec3
+        mesh_cnt: ti.template(), hit_pos: vec3
     ):
         """
             A unified sampling function, choose sampling strategy according to _type \\
@@ -58,13 +59,13 @@ class TaichiSource:
             ret_pdf     = self.inv_area
             dot_light   = 1.0
             diff        = vec3([0, 0, 0])
-            if idx >= 0:   # sample from mesh
-                mesh_num = mesh_cnt[idx]
+            if self.obj_ref_id >= 0:   # sample from mesh
+                mesh_num    = mesh_cnt[self.obj_ref_id]
                 tri_id      = ti.random(ti.i32) % mesh_num       # ASSUME that triangles are similar in terms of area
-                normal      = normals[idx, tri_id]
-                dv1         = dvs[idx, tri_id, 0]
-                dv2         = dvs[idx, tri_id, 1]
-                ret_pos     = sample_triangle(dv1, dv2)
+                normal      = normals[self.obj_ref_id, tri_id]
+                dv1         = dvs[self.obj_ref_id, tri_id, 0]
+                dv2         = dvs[self.obj_ref_id, tri_id, 1]
+                ret_pos     = sample_triangle(dv1, dv2) + dvs[self.obj_ref_id, tri_id, 2]
                 diff        = hit_pos - ret_pos
                 dot_light   = ti.math.dot(diff, normal)
             else:               # sample from pre-defined basis plane
