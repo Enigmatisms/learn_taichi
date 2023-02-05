@@ -8,7 +8,6 @@
 import sys
 sys.path.append("..")
 
-import numpy as np
 import taichi as ti
 from taichi.math import vec3
 
@@ -17,7 +16,8 @@ from la.cam_transform import *
 from tracer.tracer_base import TracerBase
 from emitters.abtract_source import LightSource, TaichiSource
 
-from bsdf.bsdfs import BSDF
+from bxdf.brdf import BRDF
+from bxdf.bsdf import BSDF, BSDF_np
 from scene.opts import get_options
 from scene.obj_desc import ObjDescriptor
 from scene.xml_parser import mitsuba_parsing
@@ -26,7 +26,6 @@ from sampler.general_sampling import *
 
 """
 2.5 TODO:
-- One more BSDF (FrenselBlend)
 - Refraction / BTDF implementation (according to previous implementation in Rust)
 """
 
@@ -54,9 +53,12 @@ class PathTracer(TracerBase):
         self.src_num    = len(emitters)
         self.color      = ti.Vector.field(3, ti.f32, (self.w, self.h))      # color without normalization
         self.src_field  = TaichiSource.field()
+        self.brdf_field = BRDF.field()
         self.bsdf_field = BSDF.field()
         ti.root.dense(ti.i, self.src_num).place(self.src_field)             # Light source Taichi storage
-        ti.root.dense(ti.i, self.num_objects).place(self.bsdf_field)        # BSDF Taichi storage
+        ti.root.bitmasked(ti.i, self.num_objects).place(self.brdf_field)        # BRDF Taichi storage
+        ti.root.bitmasked(ti.i, self.num_objects).place(self.bsdf_field)        # BRDF Taichi storage
+        # FIXME: Add BTDF
 
         self.initialze(emitters, objects)
 
@@ -72,9 +74,15 @@ class PathTracer(TracerBase):
                 if mesh.shape[0] > 2:       # not a sphere
                     self.precom_vec[i, j, 0] = self.meshes[i, j, 1] - self.meshes[i, j, 0]                    
                     self.precom_vec[i, j, 1] = self.meshes[i, j, 2] - self.meshes[i, j, 0]             
-                    self.precom_vec[i, j, 2] = self.meshes[i, j, 0]        
+                    self.precom_vec[i, j, 2] = self.meshes[i, j, 0]
+                else:
+                    self.precom_vec[i, j, 0] = self.meshes[i, j, 0]
+                    self.precom_vec[i, j, 1] = self.meshes[i, j, 1]
             self.mesh_cnt[i]    = obj.tri_num
-            self.bsdf_field[i]  = obj.bsdf.export()
+            if type(obj.bsdf) == BSDF_np:
+                self.bsdf_field[i]  = obj.bsdf.export()
+            else:
+                self.brdf_field[i]  = obj.bsdf.export()
             self.aabbs[i, 0]    = ti.Matrix(obj.aabb[0])        # unrolled
             self.aabbs[i, 1]    = ti.Matrix(obj.aabb[1])
             emitter_ref_id      = obj.emitter_ref_id
@@ -110,14 +118,13 @@ class PathTracer(TracerBase):
             hit_light       = self.emitter_id[obj_id]   # id for hit emitter, if nothing is hit, this value will be -1
             color           = vec3([0, 0, 0])
             contribution    = vec3([1, 1, 1])
-            emission_weight = 1.0
             for _i in range(self.max_bounce):
                 if obj_id < 0: break                    # nothing is hit, break
                 if ti.static(self.use_rr):
                     # Simple Russian Roullete ray termination
                     max_value = contribution.max()
                     if ti.random(float) > max_value: break
-                    else: contribution *= 1. / max_value    # unbiased calculation
+                    else: contribution *= 1. / (max_value + 1e-7)    # unbiased calculation
                 else:
                     if contribution.max() < 1e-4: break     # contribution too small, break
                 hit_point   = ray_d * min_depth + ray_o
@@ -141,7 +148,7 @@ class PathTracer(TracerBase):
                         to_emitter  = emit_pos - hit_point
                         emitter_d   = to_emitter.norm()
                         light_dir   = to_emitter / emitter_d
-                        direct_spec = self.bsdf_field[obj_id].eval(ray_d, light_dir, normal)
+                        direct_spec = self.brdf_field[obj_id].eval(ray_d, light_dir, normal)
                         if self.does_intersect(light_dir, hit_point, emitter_d):        # shadow ray 
                             shadow_int.fill(0.0)
                     else:       # the only situation for being invalid, is when there is only one source and the ray hit the source
@@ -149,26 +156,25 @@ class PathTracer(TracerBase):
                         break
                     light_pdf = emitter_pdf * direct_pdf
                     if ti.static(self.use_mis):
-                        bsdf_pdf = self.bsdf_field[obj_id].get_pdf(light_dir, normal, ray_d)
+                        bsdf_pdf = self.brdf_field[obj_id].get_pdf(light_dir, normal, ray_d)
                         mis_w    = mis_weight(light_pdf, bsdf_pdf)
                         direct_int += direct_spec * shadow_int * mis_w
                     else:
                         direct_int += direct_spec * shadow_int / light_pdf
                 if not break_flag:
                     direct_int *= self.inv_num_shadow_ray
-
                 if hit_light >= 0:
                     emit_int = self.src_field[hit_light].eval_le(hit_point - ray_o)
                 
                 # indirect component requires sampling 
-                ray_d, indirect_spec, ray_pdf = self.bsdf_field[obj_id].sample_new_ray(ray_d, normal)
+                ray_d, indirect_spec, ray_pdf = self.brdf_field[obj_id].sample_new_ray(ray_d, normal)
                 ray_o = hit_point
-                color += (direct_int + emit_int * emission_weight) * contribution
+                color += (direct_int + emit_int) * contribution
                 # VERY IMPORTANT: rendering should be done according to rendering equation (approximation)
                 contribution *= indirect_spec / ray_pdf
                 obj_id, normal, min_depth = self.ray_intersect(ray_d, ray_o)
                 # it turns out that MIS for emitter sampling does not yield a very good result
-            self.color[i, j] += color
+            self.color[i, j] += ti.select(ti.math.isnan(color), 0., color)
             self.pixels[i, j] = self.color[i, j] / self.cnt[None]
 
 if __name__ == "__main__":
@@ -194,4 +200,5 @@ if __name__ == "__main__":
     if options.profile:
         ti.profiler.print_kernel_profiler_info() 
     pixels = pt.pixels.to_numpy()
+    print(f"Maximum value: {pixels.max():.5f}")
     ti.tools.imwrite(pixels, options.output_path + options.img_name)

@@ -37,7 +37,7 @@ class ObjDescriptor:
         self.normals = normals
         self.R = R
         self.t = t
-        self.bsdf = bsdf
+        self.bsdf = bsdf                           # object can have BSDF (BRDF + BTDF)
         self.aabb = get_aabb(meshes, _type)        # of shape (2, 3)
         self.emitter_ref_id = emit_id
         self.type = 0

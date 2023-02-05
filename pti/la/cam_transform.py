@@ -11,7 +11,7 @@ from taichi.math import vec3, mat3
 from numpy import ndarray as Arr
 from scipy.spatial.transform import Rotation as Rot
 
-__all__ = ['fov2focal', 'np_rotation_between', 'rotation_between']
+__all__ = ['fov2focal', 'np_rotation_between', 'rotation_between', 'delocalize_rotate']
 
 colv3 = ti.types.matrix(3, 1, float)        # column vector
 rowv3 = ti.types.matrix(1, 3, float)        # row vector
@@ -66,6 +66,11 @@ def rotation_between(fixed: vec3, target: vec3) -> vec3:
     else:
         ret_R = ti.Matrix.diag(3, -1)
     return ret_R
+
+@ti.func
+def delocalize_rotate(anchor: vec3, local_dir: vec3):
+    R = rotation_between(vec3([0, 1, 0]), anchor)
+    return (R @ local_dir).normalized(), R
 
 if __name__ == "__main__":
     from time import time

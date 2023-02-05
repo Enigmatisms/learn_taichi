@@ -14,7 +14,8 @@ import xml.etree.ElementTree as xet
 from taichi.math import vec3
 
 from scene.general_parser import rgb_parse
-from sampler.general_sampling import sample_triangle
+from la.cam_transform import delocalize_rotate
+from sampler.general_sampling import sample_triangle, cosine_hemisphere
 
 @ti.dataclass
 class TaichiSource:
@@ -60,14 +61,24 @@ class TaichiSource:
             dot_light   = 1.0
             diff        = vec3([0, 0, 0])
             if self.obj_ref_id >= 0:   # sample from mesh
-                mesh_num    = mesh_cnt[self.obj_ref_id]
-                tri_id      = ti.random(ti.i32) % mesh_num       # ASSUME that triangles are similar in terms of area
-                normal      = normals[self.obj_ref_id, tri_id]
-                dv1         = dvs[self.obj_ref_id, tri_id, 0]
-                dv2         = dvs[self.obj_ref_id, tri_id, 1]
-                ret_pos     = sample_triangle(dv1, dv2) + dvs[self.obj_ref_id, tri_id, 2]
-                diff        = hit_pos - ret_pos
-                dot_light   = ti.math.dot(diff, normal)
+                mesh_num = mesh_cnt[self.obj_ref_id]
+                normal   = vec3([0, 1, 0])
+                if mesh_num:
+                    tri_id    = ti.random(ti.i32) % mesh_num       # ASSUME that triangles are similar in terms of area
+                    normal    = normals[self.obj_ref_id, tri_id]
+                    dv1       = dvs[self.obj_ref_id, tri_id, 0]
+                    dv2       = dvs[self.obj_ref_id, tri_id, 1]
+                    ret_pos   = sample_triangle(dv1, dv2) + dvs[self.obj_ref_id, tri_id, 2]
+                else:
+                    center    = dvs[self.obj_ref_id, 0, 0]
+                    radius    = dvs[self.obj_ref_id, 0, 1][0]
+                    to_hit    = (hit_pos - center).normalized()
+                    local_dir, pdf = cosine_hemisphere()
+                    normal, _ = delocalize_rotate(to_hit, local_dir)
+                    ret_pos   = center + normal * radius
+                    ret_pdf   = 0.5 * pdf
+                diff      = hit_pos - ret_pos
+                dot_light = ti.math.dot(diff.normalized(), normal)
             else:               # sample from pre-defined basis plane
                 rand_axis1  = ti.random(float) - 0.5
                 rand_axis2  = ti.random(float) - 0.5
@@ -75,7 +86,7 @@ class TaichiSource:
                 v_axis2     = self.base_2 * self.l2 * rand_axis2
                 ret_pos    += (v_axis1 + v_axis2)
                 diff        = hit_pos - ret_pos
-                dot_light   = ti.math.dot(diff, self.dirv)
+                dot_light   = ti.math.dot(diff.normalized(), self.dirv)
             if dot_light <= 0.0:
                 ret_int = vec3([0, 0, 0])
                 ret_pdf = 1.0

@@ -9,13 +9,12 @@ import os
 import sys
 sys.path.append("..")
 
-import numpy as np
 import xml.etree.ElementTree as xet
 
 from typing import List
 from numpy import ndarray as Arr
 
-from bsdf.bsdfs import BSDF_np
+from bxdf.brdf import BRDF_np
 
 from scene.obj_loader import *
 from scene.obj_desc import ObjDescriptor
@@ -97,7 +96,7 @@ def parse_wavefront(directory: str, obj_list: List[xet.Element], bsdf_dict: dict
                 bsdf_item = bsdf_dict[ref_child.get("id")]
             elif ref_type == "emitter":
                 emitter_ref_id = emitter_dict[ref_child.get("id")]
-                attached_area_dict[emitter_ref_id] = calculate_surface_area(meshes)
+                attached_area_dict[emitter_ref_id] = calculate_surface_area(meshes, obj_type)
         if bsdf_item is None:
             raise ValueError("Object should be attached with a BSDF for now since no default one implemented yet.")
         all_objs.append(ObjDescriptor(meshes, normals, bsdf_item, trans_r, trans_t, emit_id = emitter_ref_id, _type = obj_type))
@@ -111,8 +110,9 @@ def parse_bsdf(bsdf_list: List[xet.Element]):
     """
     results = dict()
     for bsdf_node in bsdf_list:
+        # FIXME: there could be BTDF, should be smarter than the current state
         bsdf_id = bsdf_node.get("id")
-        bsdf = BSDF_np(bsdf_node)
+        bsdf = BRDF_np(bsdf_node)
         if bsdf_id in results:
             print(f"Warning: BSDF {bsdf_id} re-defined in XML file. Overwriting the existing BSDF.")
         results[bsdf_id] = bsdf
