@@ -103,7 +103,7 @@ class TaichiSource:
         if self._type == 1:
             dot_light = -ti.math.dot(inci_dir.normalized(), normal)
             if dot_light > 0:
-                ret_int = self.intensity
+                ret_int = self.intensity        # FIXME: this could be a bug
         return ret_int
 
     @ti.func

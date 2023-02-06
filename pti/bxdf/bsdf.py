@@ -69,10 +69,9 @@ class BSDF:
     k_t:        vec3            # transmission coeffcient
     ior:        ti.f32
 
-    def sample_det_refraction():
-        """ Deterministic refraction sampling - Surface reflection model: 
-            A homespun dot powered reflection (hemisphere dot power)
-        """
+    def sample_det_refraction(self, incid: vec3, normal: vec3):
+        """ Deterministic refraction sampling - Surface reflection is pure mirror specular """
+        
         pass
 
 
