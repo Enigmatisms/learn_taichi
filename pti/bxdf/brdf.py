@@ -29,14 +29,12 @@ class BRDF_np:
         @author: Qianyue He
         @date: 2023-1-23
     """
-
     __all_albedo_name       = {"reflectance", "albedo", "k_d"}
     __all_glossiness_name   = {"glossiness", "shininess", "k_g"}
     __all_specular_name     = {"specular", "k_s"}
     __all_absorption_name   = {"absorptions", "k_a"}
     # Attention: microfacet support will not be added recently
-    __type_mapping          = {"blinn-phong": 0, "lambertian": 1, "specular": 2, "microfacet": 3, "mod-phong": 4,
-                               "frensel-blend": 5}
+    __type_mapping          = {"blinn-phong": 0, "lambertian": 1, "specular": 2, "microfacet": 3, "mod-phong": 4, "frensel-blend": 5}
     
     def __init__(self, elem: xet.Element, no_setup = False):
         self.type: str = elem.get("type")

@@ -58,6 +58,7 @@ class BSDF:
     """
         TODO: 
         - implement simple BSDF first (simple refraction and mirror surface / glossy surface / lambertian surface)
+        - transmission and reflection have independent distribution, yet transmission can be stochastic 
     """
     _type:      ti.i32
     is_delta:   ti.i32          # whether the BRDF is Dirac-delta-like
@@ -65,7 +66,14 @@ class BSDF:
     k_s:        vec3            # specular coefficient
     k_g:        vec3            # glossiness coefficient
     k_a:        vec3            # absorption coefficient
+    k_t:        vec3            # transmission coeffcient
     ior:        ti.f32
+
+    def sample_det_refraction():
+        """ Deterministic refraction sampling - Surface reflection model: 
+            A homespun dot powered reflection (hemisphere dot power)
+        """
+        pass
 
 
     
