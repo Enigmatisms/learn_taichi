@@ -65,7 +65,7 @@
 	</bsdf>
 
 	<emitter type="rect_area" id="rect_area">
-		<rgb name="reflectance" value="20.0, 19.6, 19.3"/>
+		<rgb name="reflectance" value="30.0, 29.6, 29.3"/>
 	</emitter>
 
 	<shape type="obj">

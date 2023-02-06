@@ -39,7 +39,7 @@ class TaichiSource:
 
     @ti.func
     def distance_attenuate(self, x: vec3):
-        return ti.min(1.0 / (1e-5 + x.norm_sqr()), 1e5)
+        return ti.min(1.0 / ti.max(x.norm_sqr(), 1e-5), 1.0)
 
     @ti.func
     def sample(
@@ -91,16 +91,19 @@ class TaichiSource:
                 ret_int = vec3([0, 0, 0])
                 ret_pdf = 1.0
             else:
-                ret_int *= (self.distance_attenuate(diff) * dot_light)
+                diff_norm2 = diff.norm_sqr()
+                ret_pdf   *= ti.select(dot_light > 0.0, diff_norm2 / dot_light, 0.0)
+                ret_int   *= (1. / ti.max(diff_norm2, 1e-5) * dot_light)
         return ret_pos, ret_int, ret_pdf
 
     @ti.func
-    def eval_le(self, inci_dir: vec3):
+    def eval_le(self, inci_dir: vec3, normal: vec3):
         """ Emission evaluation, incid_dir is not normalized """
-        ret_int = self.intensity
+        ret_int = vec3([0, 0, 0])
         if self._type == 1:
-            if ti.math.dot(inci_dir, self.dirv) > 0:
-                ret_int.fill(0.0)
+            dot_light = -ti.math.dot(inci_dir.normalized(), normal)
+            if dot_light > 0:
+                ret_int = self.intensity
         return ret_int
 
     @ti.func

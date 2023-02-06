@@ -119,7 +119,7 @@ class TracerBase:
         obj_id = -1
         tri_id = -1
         if min_depth > 0.0:
-            min_depth -= 1e-4
+            min_depth -= 5e-4
         else:
             min_depth = 1e7
         for aabb_idx in range(self.num_objects):
@@ -153,7 +153,7 @@ class TracerBase:
                     ray_t -= ti.sqrt(radius2 - c2ray_norm)
                 else:
                     ray_t += ti.sqrt(radius2 - c2ray_norm)
-                if ray_t > 1e-4 and ray_t < min_depth:
+                if ray_t > 5e-4 and ray_t < min_depth:
                     min_depth = ray_t
                     obj_id = aabb_idx
                     tri_id = -1
@@ -175,7 +175,7 @@ class TracerBase:
             C++ supports compile-time branching via template parameter, but Taichi can not "pass" compile-time constants
         """
         if depth > 0.0:
-            depth -= 1e-4
+            depth -= 5e-4
         else:
             depth = 1e7
         flag = False
@@ -190,7 +190,7 @@ class TracerBase:
                     mat = ti.Matrix.cols([vec1, vec2, -ray]).inverse()
                     u, v, t = mat @ (start_p - p1)
                     if u >= 0 and v >= 0 and u + v <= 1.0:
-                        if t > 1e-4 and t < depth:
+                        if t > 5e-4 and t < depth:
                             flag = True
                             break
             else:
@@ -206,7 +206,7 @@ class TracerBase:
                     ray_t -= ti.sqrt(radius2 - c2ray_norm)
                 else:
                     ray_t += ti.sqrt(radius2 - c2ray_norm)
-                if ray_t > 1e-4 and ray_t < depth:
+                if ray_t > 5e-4 and ray_t < depth:
                     flag = True
             if flag == True: break
         return flag

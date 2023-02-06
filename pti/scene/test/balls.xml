@@ -73,11 +73,11 @@
 	</bsdf>
 
 	<emitter type="rect_area" id="rect_area">
-		<rgb name="reflectance" value="20.0, 19.6, 19.3"/>
+		<rgb name="emission" value="45.0, 42.6, 40.3"/>
 	</emitter>
 
 	<emitter type="rect_area" id="ball_emit">
-		<rgb name="reflectance" value="2.0, 1.5, 1.3"/>
+		<rgb name="emission" value="2.0, 1.5, 1.3"/>
 	</emitter>
 
 	<!-- <emitter type="point" id="point">

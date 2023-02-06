@@ -50,6 +50,7 @@ class PathTracer(TracerBase):
         # for object with attached light source, emitter id stores the reference id to the emitter
         self.emitter_id = ti.field(ti.i32, self.num_objects)   
                      
+        self.emit_max   = 1.0
         self.src_num    = len(emitters)
         self.color      = ti.Vector.field(3, ti.f32, (self.w, self.h))      # color without normalization
         self.src_field  = TaichiSource.field()
@@ -66,6 +67,7 @@ class PathTracer(TracerBase):
         for i, emitter in enumerate(emitters):
             self.src_field[i] = emitter.export()
             self.src_field[i].obj_ref_id = -1
+            self.emit_max = max(emitter.intensity.max(), self.emit_max)
         for i, obj in enumerate(objects):
             for j, (mesh, normal) in enumerate(zip(obj.meshes, obj.normals)):
                 self.normals[i, j] = ti.Vector(normal) 
@@ -118,6 +120,7 @@ class PathTracer(TracerBase):
             hit_light       = self.emitter_id[obj_id]   # id for hit emitter, if nothing is hit, this value will be -1
             color           = vec3([0, 0, 0])
             contribution    = vec3([1, 1, 1])
+            emission_weight = 1.0
             for _i in range(self.max_bounce):
                 if obj_id < 0: break                    # nothing is hit, break
                 if ti.static(self.use_rr):
@@ -128,7 +131,7 @@ class PathTracer(TracerBase):
                 else:
                     if contribution.max() < 1e-4: break     # contribution too small, break
                 hit_point   = ray_d * min_depth + ray_o
-                hit_light = self.emitter_id[obj_id]
+                
 
                 direct_pdf  = 1.0
                 emitter_pdf = 1.0
@@ -164,16 +167,25 @@ class PathTracer(TracerBase):
                 if not break_flag:
                     direct_int *= self.inv_num_shadow_ray
                 if hit_light >= 0:
-                    emit_int = self.src_field[hit_light].eval_le(hit_point - ray_o)
+                    emit_int = self.src_field[hit_light].eval_le(hit_point - ray_o, normal)
+                    # emit_int /= self.emit_max
                 
                 # indirect component requires sampling 
                 ray_d, indirect_spec, ray_pdf = self.brdf_field[obj_id].sample_new_ray(ray_d, normal)
                 ray_o = hit_point
-                color += (direct_int + emit_int) * contribution
+                color += (direct_int + emit_int * emission_weight) * contribution
                 # VERY IMPORTANT: rendering should be done according to rendering equation (approximation)
                 contribution *= indirect_spec / ray_pdf
                 obj_id, normal, min_depth = self.ray_intersect(ray_d, ray_o)
-                # it turns out that MIS for emitter sampling does not yield a very good result
+
+                if obj_id >= 0:
+                    hit_light = self.emitter_id[obj_id]
+                    if ti.static(self.use_mis):
+                        emitter_pdf = 0.0
+                        if hit_light >= 0 and self.brdf_field[obj_id].is_delta == 0:
+                            emitter_pdf = self.src_field[hit_light].solid_angle_pdf(ray_d, normal, min_depth)
+                        emission_weight = mis_weight(ray_pdf, emitter_pdf)
+
             self.color[i, j] += ti.select(ti.math.isnan(color), 0., color)
             self.pixels[i, j] = self.color[i, j] / self.cnt[None]
 
