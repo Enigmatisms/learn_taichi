@@ -3,7 +3,7 @@
 <!-- Author: Qianyue He / Original credit goes to Wenzel Jakob -->
 <!-- Only Steady state rendering are supported -->
 <!-- Only RGB or rgb spectrums are supported -->
-<scene version="1.0">
+<scene version="1.1">
 	<sensor type="perspective">
 		<float name="near_clip" value="0.001"/>
 		<float name="far_clip" value="2000"/>
@@ -28,41 +28,41 @@
 		</film>
 	</sensor>
 
-	<bsdf type="blinn-phong" id="box">
+	<brdf type="blinn-phong" id="box">
 		<rgb name="reflectance" value="#BCBCBC"/>
 		<rgb name="k_g" value="1.0"/>
 		<rgb name="k_s" value="0.0"/>
-	</bsdf>
+	</brdf>
 
-	<bsdf type="blinn-phong" id="large_box">
+	<brdf type="blinn-phong" id="large_box">
 		<rgb name="reflectance" value="#BCBCBC"/>
 		<rgb name="k_g" value="1.0"/>
 		<rgb name="k_s" value="0.0"/>
-	</bsdf>
+	</brdf>
 
-	<bsdf type="blinn-phong" id="white">
+	<brdf type="blinn-phong" id="white">
 		<rgb name="reflectance" value="#BDBDBD"/>
 		<rgb name="k_g" value="1.0"/>
 		<rgb name="k_s" value="0.0"/>
-	</bsdf>
+	</brdf>
 
-	<bsdf type="blinn-phong" id="left_wall">
+	<brdf type="blinn-phong" id="left_wall">
 		<rgb name="reflectance" value="#DD2525"/>
 		<rgb name="k_g" value="1.0"/>
 		<rgb name="k_s" value="0.0"/>
-	</bsdf>
+	</brdf>
 
-	<bsdf type="blinn-phong" id="right_wall">
+	<brdf type="blinn-phong" id="right_wall">
 		<rgb name="reflectance" value="#25DD25"/>
 		<rgb name="k_g" value="1.0"/>
 		<rgb name="k_s" value="0.0"/>
-	</bsdf>
+	</brdf>
 
-	<bsdf type="blinn-phong" id="light">
+	<brdf type="blinn-phong" id="light">
 		<rgb name="reflectance" value="#555555"/>
 		<rgb name="k_g" value="1.0"/>
 		<rgb name="k_s" value="0.0"/>
-	</bsdf>
+	</brdf>
 
 	<emitter type="rect_area" id="rect_area">
 		<rgb name="reflectance" value="30.0, 29.6, 29.3"/>
@@ -121,4 +121,15 @@
 		</transform>
 		<ref type="material" id="large_box"/>
 	</shape>
+
+	<world name="yes!">
+		<rgb name="skybox" value="0.0"/>
+		<rgb name="ambient" value="0.0"/>
+		<medium type="air">
+			<rgb name="u_a" value="0.0"/>
+			<rgb name="u_s" value="0.0"/>
+			<rgb name="par" value="0.0"/>
+			<float name="ior" value="1.0"/>
+		</medium>
+	</world>
 </scene>

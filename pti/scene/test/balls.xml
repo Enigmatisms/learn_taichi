@@ -4,14 +4,12 @@
 <!-- Only Steady state rendering are supported -->
 <!-- Only RGB or rgb spectrums are supported -->
 <scene version="1.1">
-
-
 	<sensor type="perspective">
 		<float name="near_clip" value="0.001"/>
 		<float name="far_clip" value="2000"/>
 		<float name="fov" value="39.3077"/>
         <integer name="sample_count" value="128"/>
-        <integer name="max_bounce" value="12"/>
+        <integer name="max_bounce" value="16"/>
         <integer name="num_shadow_ray" value="4"/>       
 
         <boolean name="use_rr" value="true"/>				<!-- Whether to use Russian roulette ray termination -->
@@ -69,7 +67,7 @@
 	</brdf>
 
 	<brdf type="blinn-phong" id="light">
-		<rgb name="k_d" value="#555555"/>
+		<rgb name="k_d" value="#CCCCCC"/>
 		<rgb name="k_g" value="1.0"/>
 		<rgb name="k_s" value="0.0"/>
 	</brdf>
@@ -80,12 +78,12 @@
 			<rgb name="u_a" value="0.0"/>
 			<rgb name="u_s" value="0.0"/>
 			<rgb name="par" value="0.0"/>
-			<float name="ior" value="1.3"/>
+			<float name="ior" value="1.5"/>
 		</medium>
 	</bsdf>
 
 	<emitter type="rect_area" id="rect_area">
-		<rgb name="emission" value="45.0, 42.6, 40.3"/>
+		<rgb name="emission" value="70.0, 63.2, 60.3"/>
 	</emitter>
 
 	<emitter type="rect_area" id="ball_emit">
@@ -148,27 +146,27 @@
 	</shape>
 
 	<shape type="sphere">
-		<point name="center" x="1.0" y="0.5" z="1.3"/>
-		<float name="radius" value="0.5"/>
-		<ref type="material" id="glossy"/>
-	</shape>
-
-	<shape type="sphere">
 		<point name="center" x="3.2" y="0.4" z="0.8"/>
 		<float name="radius" value="0.4"/>
 		<ref type="material" id="white"/>
 	</shape>
 
 	<shape type="sphere">
-		<point name="center" x="2.0" y="0.4" z="0.2"/>
+		<point name="center" x="2.7" y="0.4" z="3.8"/>
 		<float name="radius" value="0.4"/>
 		<ref type="material" id="white"/>
 		<ref type="emitter" id="ball_emit"/>
 	</shape>
 
 	<shape type="sphere">
-		<point name="center" x="2.0" y="1.3" z="3.4"/>
-		<float name="radius" value="1.3"/>
+		<point name="center" x="0.9" y="0.5" z="0.6"/>
+		<float name="radius" value="0.5"/>
+		<ref type="material" id="glossy"/>
+	</shape>
+
+	<shape type="sphere">
+		<point name="center" x="1.7" y="1.2" z="1.9"/>
+		<float name="radius" value="1.2"/>
 		<ref type="material" id="glass"/>
 	</shape>
 

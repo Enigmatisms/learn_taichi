@@ -135,7 +135,7 @@ class TracerBase:
                     mat = ti.Matrix.cols([vec1, vec2, -ray]).inverse()
                     u, v, t = mat @ (start_p - p1)
                     if u >= 0 and v >= 0 and u + v <= 1.0:
-                        if t > 1e-3 and t < min_depth:
+                        if t > 5e-4 and t < min_depth:
                             min_depth = t
                             obj_id = aabb_idx
                             tri_id = mesh_idx
@@ -148,7 +148,7 @@ class TracerBase:
                 c2ray_norm = center_norm2 - proj_norm ** 2  # center to ray distance ** 2
                 if c2ray_norm >= radius2: continue
                 ray_t = proj_norm
-                if center_norm2 > radius2:
+                if center_norm2 > radius2 + 5e-4:
                     ray_t -= ti.sqrt(radius2 - c2ray_norm)
                 else:
                     ray_t += ti.sqrt(radius2 - c2ray_norm)
@@ -201,7 +201,7 @@ class TracerBase:
                 c2ray_norm = center_norm2 - proj_norm ** 2  # center to ray distance ** 2
                 if c2ray_norm >= radius2: continue
                 ray_t = proj_norm
-                if center_norm2 > radius2:
+                if center_norm2 > radius2 + 5e-4:
                     ray_t -= ti.sqrt(radius2 - c2ray_norm)
                 else:
                     ray_t += ti.sqrt(radius2 - c2ray_norm)

@@ -117,7 +117,6 @@ def parse_bxdf(bxdf_list: List[xet.Element]):
         if bxdf_type == "brdf":
             bxdf = BRDF_np(bxdf_node)
         else:
-            print(f"id = {bxdf_id}")
             bxdf = BSDF_np(bxdf_node)
         if bxdf_id in results:
             print(f"Warning: BXDF {bxdf_id} re-defined in XML file. Overwriting the existing BXDF.")
