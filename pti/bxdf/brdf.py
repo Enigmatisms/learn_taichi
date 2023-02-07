@@ -38,9 +38,7 @@ class BRDF_np:
     
     def __init__(self, elem: xet.Element, no_setup = False):
         self.type: str = elem.get("type")
-        if self.type not in BRDF_np.__type_mapping:
-            raise NotImplementedError(f"Unknown BRDF type: {self.type}")
-        self.type_id = BRDF_np.__type_mapping[self.type]
+        self.type_id = -1
         self.id: str = elem.get("id")
         self.k_d = np.ones(3, np.float32)
         self.k_s = np.zeros(3, np.float32)
@@ -72,6 +70,9 @@ class BRDF_np:
             self.setup()
 
     def setup(self):
+        if self.type not in BRDF_np.__type_mapping:
+            raise NotImplementedError(f"Unknown BRDF type: {self.type}")
+        self.type_id = BRDF_np.__type_mapping[self.type]
         if self.type_id == 2:
             if self.k_g.max() < 1e-4:       # glossiness (actually means roughness) in specular BRDF being too "small"
                 self.is_delta = True
@@ -79,6 +80,8 @@ class BRDF_np:
             self.k_g[2] = np.sqrt((self.k_g[0] + 1) * (self.k_g[1] + 1)) / (8. * np.pi)
 
     def export(self):
+        if self.type_id == -1:
+            raise ValueError("It seems that this BRDF is not properly initialized with type_id = -1")
         return BRDF(
             _type = self.type_id, is_delta = self.is_delta, 
             k_d = vec3(self.k_d), k_s = vec3(self.k_s), k_g = vec3(self.k_g), k_a = vec3(self.k_a),
@@ -87,7 +90,6 @@ class BRDF_np:
     
     def __repr__(self) -> str:
         return f"<{self.type.capitalize()} BRDF, default:[{int(self.kd_default), int(self.ks_default), int(self.kg_default), int(self.ka_default)}]>"
-
 
 @ti.dataclass
 class BRDF:
@@ -248,7 +250,7 @@ class BRDF:
     # ================================================================
 
     @ti.func
-    def eval(self, incid: vec3, out: vec3, normal: vec3) -> vec3:
+    def eval(self, incid: vec3, out: vec3, normal: vec3, medium) -> vec3:
         """ Direct component reflectance """
         ret_spec = vec3([1, 1, 1])
         if self._type == 0:         # Blinn-Phong
@@ -267,7 +269,7 @@ class BRDF:
         return ret_spec
 
     @ti.func
-    def sample_new_ray(self, incid: vec3, normal: vec3):
+    def sample_new_rays(self, incid: vec3, normal: vec3, medium):
         """
             All the sampling function will return: (1) new ray (direction) \\
             (2) rendering equation transfer term (BRDF * cos term) (3) PDF
@@ -290,7 +292,7 @@ class BRDF:
         return ret_dir, ret_spec, pdf
 
     @ti.func
-    def get_pdf(self, outdir: vec3, normal: vec3, incid: vec3):
+    def get_pdf(self, outdir: vec3, normal: vec3, incid: vec3, medium):
         """ 
             Solid angle PDF for a specific incident direction - BRDF sampling
             Some PDF has nothing to do with backward incid (from eye to the surface), like diffusive 

@@ -127,8 +127,7 @@ class TracerBase:
             tri_num = self.mesh_cnt[aabb_idx]
             if tri_num:
                 for mesh_idx in range(tri_num):
-                    normal = self.normals[aabb_idx, mesh_idx]
-                    if tm.dot(ray, normal) >= 0.0: continue     # back-face culling
+                    normal = self.normals[aabb_idx, mesh_idx]   # back-face culling removed
                     # Sadly, Taichi does not support slicing. I think this restrict the use cases of Matrix field
                     p1 = self.meshes[aabb_idx, mesh_idx, 0]
                     vec1 = self.precom_vec[aabb_idx, mesh_idx, 0]

@@ -15,8 +15,10 @@ from typing import List
 from numpy import ndarray as Arr
 
 from bxdf.brdf import BRDF_np
+from bxdf.bsdf import BSDF_np
 
 from scene.obj_loader import *
+from scene.world import World_np
 from scene.obj_desc import ObjDescriptor
 from scene.general_parser import get, transform_parse, parse_sphere_element
 
@@ -25,7 +27,8 @@ from emitters.point import PointSource
 from emitters.rect_area import RectAreaSource
 from emitters.directional import DirectionalSource
 
-__MAPPING__ = {"integer": int, "float": float, "string": str, "boolean": lambda x: True if x.lower() == "true" else False}
+__VERSION__   = "1.1"
+__MAPPING__   = {"integer": int, "float": float, "string": str, "boolean": lambda x: True if x.lower() == "true" else False}
 
 """
     Actually I think in Taichi, we can leverage SSDS:
@@ -102,21 +105,31 @@ def parse_wavefront(directory: str, obj_list: List[xet.Element], bsdf_dict: dict
         all_objs.append(ObjDescriptor(meshes, normals, bsdf_item, trans_r, trans_t, emit_id = emitter_ref_id, _type = obj_type))
     return all_objs, attached_area_dict
 
-def parse_bsdf(bsdf_list: List[xet.Element]):
+def parse_bxdf(bxdf_list: List[xet.Element]):
     """
-        Parsing wavefront obj file (filename) from list of xml nodes    
-        note that participating medium is complex, therefore will not be added in the early stage
+        Parsing BSDF / BRDF from xml file
         return: dict
     """
     results = dict()
-    for bsdf_node in bsdf_list:
-        # FIXME: there could be BTDF, should be smarter than the current state
-        bsdf_id = bsdf_node.get("id")
-        bsdf = BRDF_np(bsdf_node)
-        if bsdf_id in results:
-            print(f"Warning: BSDF {bsdf_id} re-defined in XML file. Overwriting the existing BSDF.")
-        results[bsdf_id] = bsdf
+    for bxdf_node in bxdf_list:
+        bxdf_id = bxdf_node.get("id")
+        bxdf_type = bxdf_node.tag
+        if bxdf_type == "brdf":
+            bxdf = BRDF_np(bxdf_node)
+        else:
+            print(f"id = {bxdf_id}")
+            bxdf = BSDF_np(bxdf_node)
+        if bxdf_id in results:
+            print(f"Warning: BXDF {bxdf_id} re-defined in XML file. Overwriting the existing BXDF.")
+        results[bxdf_id] = bxdf
     return results
+
+def parse_world(world_elem: xet.Element):
+    world = World_np(world_elem)
+    if world_elem is None:
+        print("Warning: world element not found in xml file. Using default world settings:")
+        print(world)
+    return world
 
 def parse_global_sensor(sensor_elem: xet.Element):
     """
@@ -144,22 +157,24 @@ def mitsuba_parsing(directory: str, file: str):
     node_tree = xet.parse(xml_file)
     root_node = node_tree.getroot()
     version_tag = root_node.attrib["version"]
-    if not version_tag == "1.0":
-        raise ValueError(f"Unsupported version {version_tag}. Only '1.0' is supported right now.")  
+    if not version_tag == __VERSION__:
+        raise ValueError(f"Unsupported version {version_tag}. Only '{__VERSION__}' is supported right now.")  
     # Export list of dict for emitters / dict for other secen settings and film settings / list for obj files
+    bxdf_nodes       = root_node.findall("bsdf") + root_node.findall("brdf")
     emitter_nodes    = root_node.findall("emitter")
-    bsdf_nodes       = root_node.findall("bsdf")
     shape_nodes      = root_node.findall("shape")
     sensor_node      = root_node.find("sensor")
+    world_node       = root_node.find("world")
     assert(sensor_node)
     emitter_configs, \
     emitter_dict     = parse_emitters(emitter_nodes)
-    bsdf_dict        = parse_bsdf(bsdf_nodes)
+    bsdf_dict        = parse_bxdf(bxdf_nodes)
     meshes, area_lut = parse_wavefront(directory, shape_nodes, bsdf_dict, emitter_dict)
     configs          = parse_global_sensor(sensor_node)
+    configs['world'] = parse_world(world_node)
     emitter_configs  = update_emitter_config(emitter_configs, area_lut)
     return emitter_configs, bsdf_dict, meshes, configs
 
 if __name__ == "__main__":
-    emitter_configs, bsdf_configs, meshes, configs = mitsuba_parsing("./test/", "test.xml")
+    emitter_configs, bsdf_configs, meshes, configs = mitsuba_parsing("./test/", "balls.xml")
     print(emitter_configs, bsdf_configs, meshes, configs)

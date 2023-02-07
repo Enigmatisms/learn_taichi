@@ -18,16 +18,12 @@ from emitters.abtract_source import LightSource, TaichiSource
 
 from bxdf.brdf import BRDF
 from bxdf.bsdf import BSDF, BSDF_np
+from scene.world import World
 from scene.opts import get_options
 from scene.obj_desc import ObjDescriptor
 from scene.xml_parser import mitsuba_parsing
 
 from sampler.general_sampling import *
-
-"""
-2.5 TODO:
-- Refraction / BTDF implementation (according to previous implementation in Rust)
-"""
 
 @ti.data_oriented
 class PathTracer(TracerBase):
@@ -42,11 +38,12 @@ class PathTracer(TracerBase):
         """
         self.anti_alias         = prop['anti_alias']
         self.stratified_sample  = prop['stratified_sampling']   # whether to use stratified sampling
-        self.num_shadow_ray     = prop['num_shadow_ray']        # number of shadow samples to trace
         self.use_mis            = prop['use_mis']               # whether to use multiple importance sampling
+        self.num_shadow_ray     = prop['num_shadow_ray']        # number of shadow samples to trace
         assert(self.num_shadow_ray >= 1)
         self.inv_num_shadow_ray = 1. / float(self.num_shadow_ray)
-
+        
+        self.world              = prop['world'].export()        # world (free space / ambient light / background props)
         # for object with attached light source, emitter id stores the reference id to the emitter
         self.emitter_id = ti.field(ti.i32, self.num_objects)   
                      
@@ -57,9 +54,9 @@ class PathTracer(TracerBase):
         self.brdf_field = BRDF.field()
         self.bsdf_field = BSDF.field()
         ti.root.dense(ti.i, self.src_num).place(self.src_field)             # Light source Taichi storage
-        ti.root.bitmasked(ti.i, self.num_objects).place(self.brdf_field)        # BRDF Taichi storage
-        ti.root.bitmasked(ti.i, self.num_objects).place(self.bsdf_field)        # BRDF Taichi storage
-        # FIXME: Add BTDF
+        self.brdf_nodes = ti.root.bitmasked(ti.i, self.num_objects)
+        self.brdf_nodes.place(self.brdf_field)                              # BRDF Taichi storage
+        ti.root.bitmasked(ti.i, self.num_objects).place(self.bsdf_field)    # BRDF Taichi storage (no node needed)
 
         self.initialze(emitters, objects)
 
@@ -91,6 +88,44 @@ class PathTracer(TracerBase):
             self.emitter_id[i]  = emitter_ref_id
             if emitter_ref_id  >= 0:
                 self.src_field[emitter_ref_id].obj_ref_id = i
+
+    @ti.func
+    def sample_new_ray(self, idx: ti.i32, incid: vec3, normal: vec3, medium):
+        ret_dir  = vec3([0, 1, 0])
+        ret_spec = vec3([1, 1, 1])
+        pdf      = 1.0
+        if ti.is_active(self.brdf_nodes, idx):      # active means the object is attached to BRDF
+            ret_dir, ret_spec, pdf = self.brdf_field[idx].sample_new_rays(incid, normal, medium)
+        else:
+            ret_dir, ret_spec, pdf = self.bsdf_field[idx].sample_new_rays(incid, normal, medium)
+        return ret_dir, ret_spec, pdf
+    
+    @ti.func
+    def eval(self, idx: ti.i32, incid: vec3, out: vec3, normal: vec3, medium) -> vec3:
+        ret_spec = vec3([1, 1, 1])
+        if ti.is_active(self.brdf_nodes, idx):      # active means the object is attached to BRDF
+            ret_spec = self.brdf_field[idx].eval(incid, out, normal, medium)
+        else:
+            ret_spec = self.bsdf_field[idx].eval(incid, out, normal, medium)
+        return ret_spec
+    
+    @ti.func
+    def get_pdf(self, idx: ti.i32, outdir: vec3, normal: vec3, incid: vec3, medium):
+        pdf = 0.
+        if ti.is_active(self.brdf_nodes, idx):      # active means the object is attached to BRDF
+            pdf = self.brdf_field[idx].get_pdf(outdir, normal, incid, medium)
+        else:
+            pdf = self.bsdf_field[idx].get_pdf(outdir, normal, incid, medium)
+        return pdf
+    
+    @ti.func
+    def is_delta(self, idx: ti.i32):
+        is_delta = False
+        if ti.is_active(self.brdf_nodes, idx):      # active means the object is attached to BRDF
+            is_delta = self.brdf_field[idx].is_delta
+        else:
+            is_delta = self.bsdf_field[idx].is_delta
+        return is_delta
 
     @ti.func
     def sample_light(self, no_sample: ti.i32):
@@ -131,13 +166,10 @@ class PathTracer(TracerBase):
                 else:
                     if contribution.max() < 1e-4: break     # contribution too small, break
                 hit_point   = ray_d * min_depth + ray_o
-                
 
                 direct_pdf  = 1.0
                 emitter_pdf = 1.0
-
                 break_flag  = False
-                emit_int    = vec3([0, 0, 0])
                 shadow_int  = vec3([0, 0, 0])
                 direct_int  = vec3([0, 0, 0])
                 direct_spec = vec3([1, 1, 1])
@@ -151,27 +183,29 @@ class PathTracer(TracerBase):
                         to_emitter  = emit_pos - hit_point
                         emitter_d   = to_emitter.norm()
                         light_dir   = to_emitter / emitter_d
-                        direct_spec = self.brdf_field[obj_id].eval(ray_d, light_dir, normal)
                         if self.does_intersect(light_dir, hit_point, emitter_d):        # shadow ray 
                             shadow_int.fill(0.0)
+                        else:
+                            direct_spec = self.eval(obj_id, ray_d, light_dir, normal, self.world.medium)
                     else:       # the only situation for being invalid, is when there is only one source and the ray hit the source
                         break_flag = True
                         break
                     light_pdf = emitter_pdf * direct_pdf
                     if ti.static(self.use_mis):
-                        bsdf_pdf = self.brdf_field[obj_id].get_pdf(light_dir, normal, ray_d)
+                        bsdf_pdf = self.get_pdf(obj_id, light_dir, normal, ray_d, self.world.medium)
                         mis_w    = mis_weight(light_pdf, bsdf_pdf)
                         direct_int += direct_spec * shadow_int * mis_w
                     else:
                         direct_int += direct_spec * shadow_int / light_pdf
                 if not break_flag:
                     direct_int *= self.inv_num_shadow_ray
+                # emission: ray hitting an area light source
+                emit_int    = vec3([0, 0, 0])
                 if hit_light >= 0:
                     emit_int = self.src_field[hit_light].eval_le(hit_point - ray_o, normal)
-                    # emit_int /= self.emit_max
                 
                 # indirect component requires sampling 
-                ray_d, indirect_spec, ray_pdf = self.brdf_field[obj_id].sample_new_ray(ray_d, normal)
+                ray_d, indirect_spec, ray_pdf = self.sample_new_ray(obj_id, ray_d, normal, self.world.medium)
                 ray_o = hit_point
                 color += (direct_int + emit_int * emission_weight) * contribution
                 # VERY IMPORTANT: rendering should be done according to rendering equation (approximation)
@@ -182,7 +216,7 @@ class PathTracer(TracerBase):
                     hit_light = self.emitter_id[obj_id]
                     if ti.static(self.use_mis):
                         emitter_pdf = 0.0
-                        if hit_light >= 0 and self.brdf_field[obj_id].is_delta == 0:
+                        if hit_light >= 0 and self.is_delta(obj_id) == 0:
                             emitter_pdf = self.src_field[hit_light].solid_angle_pdf(ray_d, normal, min_depth)
                         emission_weight = mis_weight(ray_pdf, emitter_pdf)
 
