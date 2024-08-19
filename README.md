@@ -27,12 +27,12 @@ https://user-images.githubusercontent.com/46109954/212971520-f7a906ea-6fe7-4cf1-
 ### Taichi Learning Phase 2
 - Implement a simple path tracer. The most important part is to fully understand Monte-Carlo integral used in path tracer. The files are included in `pti/`
   - [x] XML scene description parser
-  - [x] Depth / direct lighting component ray tracer
+  - [x] Depth / direct lighting component ray tracer 
   - [ ] BSDF only path tracer
   - [ ] Participating media
   
   
-
+The following direct lighting render is erroneous (shadowing algorithm is buggy). Please refer to [AdaPT](https://github.com/Enigmatisms/AdaPT), which is a far more advanced Taichi-lang based renderer created by me.
 
 https://user-images.githubusercontent.com/46109954/214324298-d44ede93-0f14-4d88-9710-3590ed5faf29.mp4
 
